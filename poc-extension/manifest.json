@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Fake GPS PC - POC",
+  "version": "0.1.11.2",
+  "description": "Override navigator.geolocation. Le posicao dinamica do Electron (localhost:3477) ou fallback estatico Av. Paulista.",
+  "permissions": ["storage", "scripting", "activeTab"],
+  "host_permissions": [
+    "<all_urls>",
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["inject.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "world": "ISOLATED",
+      "all_frames": false
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Fake GPS PC - POC"
+  }
+}

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content">
+
+    <com.fakegps.JoystickOverlayView
+        android:id="@+id/joystick"
+        android:layout_width="180dp"
+        android:layout_height="180dp"/>
+
+    <!-- Botao fechar no canto -->
+    <TextView
+        android:id="@+id/btn_close"
+        android:layout_width="30dp"
+        android:layout_height="30dp"
+        android:layout_gravity="top|end"
+        android:text="✕"
+        android:textColor="#ffffff"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:background="#e53935"
+        android:gravity="center"
+        android:clickable="true"
+        android:focusable="true"/>
+
+</FrameLayout>

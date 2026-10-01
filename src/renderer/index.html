@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://*.tile.openstreetmap.org data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.tile.openstreetmap.org; connect-src 'self' https://nominatim.openstreetmap.org https://routing.openstreetmap.de;">
+  <title>Fake GPS PC</title>
+  <link rel="stylesheet" href="../../node_modules/leaflet/dist/leaflet.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="title">
+      <span class="dot"></span>
+      Fake GPS PC
+      <span class="version">v0.1.11.2</span>
+    </div>
+    <div class="status">
+      <span class="status-label">Status:</span>
+      <span class="status-value" id="status-indicator">ATIVO</span>
+    </div>
+  </header>
+
+  <!-- Barra indicadora de pausa (motivo + countdown) -->
+  <div id="pause-bar" class="pause-bar hidden">
+    <span id="pause-icon" class="pause-icon">🚦</span>
+    <span id="pause-text" class="pause-text">Esperando sinal</span>
+    <span id="pause-countdown" class="pause-countdown">00:00</span>
+  </div>
+
+  <main id="map"></main>
+
+  <!-- Painel do planejador de rota (aparece quando tem >=1 crate na rota) -->
+  <div id="route-planner-panel" class="route-planner-panel hidden">
+    <div class="route-planner-header">
+      <div class="route-planner-title">
+        🗺️ ROTA PLANEJADA · <span id="route-planner-count">0 stops</span>
+        <span id="route-planner-dist" class="route-planner-dist"></span>
+      </div>
+      <div class="route-planner-actions">
+        <button id="btn-route-start" class="route-planner-btn route-planner-btn-primary">▶ Iniciar</button>
+        <button id="btn-route-clear" class="route-planner-btn route-planner-btn-ghost">✕ Limpar</button>
+      </div>
+    </div>
+    <div id="route-planner-list" class="route-planner-list"></div>
+  </div>
+
+  <!-- Modal: configuracoes da humanidade (abre via ⚙ dos presets Walk/Run) -->
+  <div id="modal-settings" class="modal-overlay hidden">
+    <div class="modal modal-wide">
+      <div class="modal-title" id="modal-settings-title">⚙️ Humanidade (pedestre)</div>
+      <div class="modal-subtitle">Pausas naturais em sinais, cruzamentos e micropausas - simula comportamento humano para evitar deteccao.</div>
+
+      <div class="toggle-row">
+        <label class="toggle-switch">
+          <input type="checkbox" id="cfg-humanityEnabled">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label">Habilitar humanidade neste preset</span>
+      </div>
+
+      <div class="settings-grid">
+        <div class="settings-row">
+          <label>Intervalo entre rolls (seg)</label>
+          <div class="range-inputs">
+            <input type="number" id="cfg-checkIntervalMin" min="1" step="1"> até
+            <input type="number" id="cfg-checkIntervalMax" min="1" step="1">
+          </div>
+        </div>
+
+        <div class="settings-section-title">🚦 Sinal/Cruzamento</div>
+        <div class="settings-row">
+          <label>Chance (%)</label>
+          <div class="range-inputs">
+            <input type="number" id="cfg-trafficStopChance" min="0" max="100" step="1">
+          </div>
+        </div>
+        <div class="settings-row">
+          <label>Duracao (seg)</label>
+          <div class="range-inputs">
+            <input type="number" id="cfg-trafficStopMin" min="1" step="1"> até
+            <input type="number" id="cfg-trafficStopMax" min="1" step="1">
+          </div>
+        </div>
+
+        <div class="settings-section-title">⏱ Micropausa</div>
+        <div class="settings-row">
+          <label>Chance (%)</label>
+          <div class="range-inputs">
+            <input type="number" id="cfg-microPauseChance" min="0" max="100" step="1">
+          </div>
+        </div>
+        <div class="settings-row">
+          <label>Duracao (seg)</label>
+          <div class="range-inputs">
+            <input type="number" id="cfg-microPauseMin" min="0.1" step="0.1"> até
+            <input type="number" id="cfg-microPauseMax" min="0.1" step="0.1">
+          </div>
+        </div>
+      </div>
+
+      <div id="modal-settings-error" class="modal-error hidden"></div>
+
+      <div class="modal-actions">
+        <button id="modal-settings-reset" class="modal-btn modal-btn-secondary">Resetar default</button>
+        <button id="modal-settings-cancel" class="modal-btn modal-btn-secondary">Cancelar</button>
+        <button id="modal-settings-save" class="modal-btn modal-btn-primary">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: comportamento de carro (abre via ⚙ do preset Carro) -->
+  <div id="modal-car" class="modal-overlay hidden">
+    <div class="modal modal-wide">
+      <div class="modal-title">🚗 Comportamento de carro</div>
+      <div class="modal-subtitle">Ajuste aceleracao, freada em curvas e paradas de sinais - simula direcao realista.</div>
+
+      <div class="settings-grid">
+        <div class="settings-section-title">🏁 Aceleracao e freada</div>
+        <div class="settings-row">
+          <label>Tempo de 0 ate velocidade max (seg)</label>
+          <div class="range-inputs">
+            <input type="number" id="car-accelSeconds" min="0.5" max="30" step="0.1">
+          </div>
+        </div>
+        <div class="settings-row">
+          <label>Freada em curva (minimo, 0 a 1)</label>
+          <div class="range-inputs">
+            <input type="number" id="car-curveSlowdownMin" min="0.05" max="1" step="0.05">
+          </div>
+        </div>
+        <div class="settings-row">
+          <label>Zona de freada antes do destino (metros)</label>
+          <div class="range-inputs">
+            <input type="number" id="car-approachMeters" min="0" max="100" step="1">
+          </div>
+        </div>
+
+        <div class="settings-section-title">🚦 Parar em sinais</div>
+        <div class="settings-row">
+          <label>Chance (%)</label>
+          <div class="range-inputs">
+            <input type="number" id="car-trafficStopChance" min="0" max="100" step="1">
+          </div>
+        </div>
+        <div class="settings-row">
+          <label>Duracao (seg)</label>
+          <div class="range-inputs">
+            <input type="number" id="car-trafficStopMin" min="1" step="1"> até
+            <input type="number" id="car-trafficStopMax" min="1" step="1">
+          </div>
+        </div>
+      </div>
+
+      <div id="modal-car-error" class="modal-error hidden"></div>
+
+      <div class="modal-actions">
+        <button id="modal-car-reset" class="modal-btn modal-btn-secondary">Resetar default</button>
+        <button id="modal-car-cancel" class="modal-btn modal-btn-secondary">Cancelar</button>
+        <button id="modal-car-save" class="modal-btn modal-btn-primary">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: orientacao fisica do celular (3D preview + sliders) -->
+  <div id="modal-orientation" class="modal-overlay hidden">
+    <div class="modal modal-wide">
+      <div class="modal-title">📱 Orientacao do celular</div>
+      <div class="modal-subtitle">Arraste o celular pra girar em X/Y. Shift + arrastar gira o alpha (bussola). Isso afeta o <code>DeviceOrientationEvent</code> no site.</div>
+
+      <div class="phone-3d-wrap">
+        <div class="phone-3d-stage">
+          <div id="phone-3d" class="phone-3d">
+            <div class="phone-face phone-front">
+              <div class="phone-screen"><span class="phone-emoji">📱</span></div>
+            </div>
+            <div class="phone-face phone-back"></div>
+            <div class="phone-face phone-right"></div>
+            <div class="phone-face phone-left"></div>
+            <div class="phone-face phone-top"></div>
+            <div class="phone-face phone-bottom"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="orientation-sliders">
+        <div class="orientation-row">
+          <label>Alpha (bussola, gira pros 2 lados)</label>
+          <input type="range" id="ori-alpha" min="-180" max="180" step="1" value="0">
+          <span id="ori-alpha-val" class="orientation-val">0°</span>
+        </div>
+        <div class="orientation-row">
+          <label>Beta (tilt frente-tras, -180 a 180°)</label>
+          <input type="range" id="ori-beta" min="-180" max="180" step="1" value="70">
+          <span id="ori-beta-val" class="orientation-val">70°</span>
+        </div>
+        <div class="orientation-row">
+          <label>Gamma (tilt lateral, -90 a 90°)</label>
+          <input type="range" id="ori-gamma" min="-90" max="90" step="1" value="0">
+          <span id="ori-gamma-val" class="orientation-val">0°</span>
+        </div>
+      </div>
+
+      <div class="toggle-row">
+        <label class="toggle-switch">
+          <input type="checkbox" id="ori-alpha-from-heading" checked>
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label">Alpha segue heading do GPS (bussola aponta pra direcao andada)</span>
+      </div>
+
+      <div class="modal-actions">
+        <button id="modal-ori-reset" class="modal-btn modal-btn-secondary">Resetar</button>
+        <button id="modal-ori-close" class="modal-btn modal-btn-primary">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: preset generico (abre via ⚙ de preset custom) -->
+  <div id="modal-preset-generic" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-title">🏷️ Preset generico</div>
+      <div class="modal-subtitle" style="margin-bottom: 16px;">
+        Este preset nao tem configs avancadas.<br><br>
+        Apenas os 3 presets built-in (Walk, Run, Carro) tem comportamentos customizaveis.<br>
+        Pra editar nome, emoji ou velocidade, use o botao <strong>⚙</strong> ao lado da barra de presets.
+      </div>
+      <div class="modal-actions">
+        <button id="modal-preset-generic-ok" class="modal-btn modal-btn-primary">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: editar presets de velocidade -->
+  <div id="modal-presets" class="modal-overlay hidden">
+    <div class="modal modal-wide">
+      <div class="modal-title">⚙️ Editar velocidades</div>
+      <div class="modal-subtitle">Ajuste nome, emoji e velocidade de cada preset. Click no + pra adicionar.</div>
+      <div id="presets-list" class="presets-list"></div>
+      <button id="btn-add-preset" class="modal-btn modal-btn-secondary" style="margin-top: 10px;">+ Adicionar preset</button>
+      <div id="modal-presets-error" class="modal-error hidden"></div>
+      <div class="modal-actions">
+        <button id="modal-presets-reset" class="modal-btn modal-btn-secondary">Resetar default</button>
+        <button id="modal-presets-cancel" class="modal-btn modal-btn-secondary">Cancelar</button>
+        <button id="modal-presets-save" class="modal-btn modal-btn-primary">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: ir para endereco/coordenadas -->
+  <div id="modal-goto" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-title">📍 Ir para...</div>
+      <div class="modal-subtitle">Digite um endereco (ex: <i>Av. Paulista 1578, Sao Paulo</i>) ou coordenadas (ex: <i>-23.5505, -46.6333</i>).</div>
+      <div class="modal-field">
+        <input type="text" id="goto-input" placeholder="endereco ou lat, lon" autocomplete="off">
+      </div>
+      <div id="goto-status" class="goto-status hidden"></div>
+      <div id="modal-goto-error" class="modal-error hidden"></div>
+      <div class="modal-actions">
+        <button id="modal-goto-cancel" class="modal-btn modal-btn-secondary">Cancelar</button>
+        <button id="modal-goto-go" class="modal-btn modal-btn-primary">Ir</button>
+      </div>
+    </div>
+  </div>
+
+  <footer class="hud">
+    <div class="panel joystick-panel">
+      <div class="panel-title">JOYSTICK</div>
+      <div id="joystick-zone"></div>
+      <div class="panel-hint">ou WASD / setas</div>
+    </div>
+
+    <div class="panel info-panel">
+      <div class="panel-title">POSICAO</div>
+      <div class="row"><span class="label">Lat</span><span id="lat" class="val">-</span></div>
+      <div class="row"><span class="label">Lon</span><span id="lon" class="val">-</span></div>
+      <div class="row"><span class="label">Head</span><span id="heading" class="val">-</span></div>
+    </div>
+
+    <div class="panel speedometer-panel">
+      <div class="panel-title">VELOCIMETRO</div>
+      <div class="speedo-wrap">
+        <div class="speedo-value" id="speedo-value">0.0</div>
+        <div class="speedo-unit">km/h</div>
+      </div>
+      <div class="speedo-max" id="speedo-max">max 5</div>
+    </div>
+
+    <div class="panel controls-panel">
+      <div class="panel-title">CONTROLES</div>
+      <div class="speed-selector-wrap">
+        <div id="speed-selector" class="speed-selector"></div>
+        <button id="btn-edit-presets" class="speed-edit-btn" title="Editar velocidades">⚙</button>
+      </div>
+      <div class="slider-row">
+        <label for="speed-slider">Vel. max</label>
+        <input type="range" id="speed-slider" min="1" max="200" step="0.5" value="5">
+        <span id="speed-value">5.0</span><span class="unit">km/h</span>
+      </div>
+      <div class="action-row">
+        <button id="btn-pause" class="action-btn" title="Pausa o movimento sem perder a posicao">⏸ Pausar</button>
+        <button id="btn-center" class="action-btn" title="Centralizar o mapa no marcador">🎯 Centralizar</button>
+        <button id="btn-goto" class="action-btn" title="Teletransportar pra um endereco ou coordenadas">📍 Ir para...</button>
+        <button id="btn-lock" class="action-btn lock-locked" title="Bloqueia teleporte. Click destrava por 5s">🔒 Teleporte: BLOQUEADO</button>
+        <button id="btn-orientation" class="action-btn" title="Simular orientacao fisica do celular (acelerometro/bussola)">📱 Orientacao</button>
+        <button id="btn-cancel-route" class="action-btn hidden" title="Cancelar rota automatica">✕ Cancelar rota</button>
+      </div>
+    </div>
+  </footer>
+
+  <script src="../../node_modules/leaflet/dist/leaflet.js"></script>
+  <script src="../../node_modules/nipplejs/dist/nipplejs.js"></script>
+  <script src="persistence.js"></script>
+  <script src="humanity.js"></script>
+  <script src="car-config.js"></script>
+  <script src="presets.js"></script>
+  <script src="routing.js"></script>
+  <script src="autopilot.js"></script>
+  <script src="crates.js"></script>
+  <script src="route-planner.js"></script>
+  <script src="map.js"></script>
+  <script src="joystick.js"></script>
+  <script src="movement.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+node_modules/
+dist/
+build/
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.vscode/settings.json
+.vscode/launch.json
+.idea/
+*.tmp
+
+# Electron
+out/
+*.exe
+*.dmg
+*.deb
+package-lock.json
+
+# Android builds
+android-apk/.gradle/
+android-apk/build/
+android-apk/app/build/
+android-apk/local.properties
+android-apk/*.iml
+
+# OS
+desktop.ini
+
+# Editor
+.vscode/
+*.swp
+*~

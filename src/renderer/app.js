@@ -1,0 +1,1247 @@
+(function (global) {
+  'use strict';
+
+  const Map = global.FakeGPS.Map;
+  const Input = global.FakeGPS.Input;
+  const Movement = global.FakeGPS.Movement;
+  const Persistence = global.FakeGPS.Persistence;
+  const Humanity = global.FakeGPS.Humanity;
+  const Routing = global.FakeGPS.Routing;
+  const AutoPilot = global.FakeGPS.AutoPilot;
+  const Crates = global.FakeGPS.Crates;
+  const RoutePlanner = global.FakeGPS.RoutePlanner;
+  const Presets = global.FakeGPS.Presets;
+  const CarConfig = global.FakeGPS.CarConfig;
+
+  // --- UI refs ---
+  const latEl = document.getElementById('lat');
+  const lonEl = document.getElementById('lon');
+  const headEl = document.getElementById('heading');
+  const speedoValue = document.getElementById('speedo-value');
+  const speedoMax = document.getElementById('speedo-max');
+  const speedSlider = document.getElementById('speed-slider');
+  const speedValue = document.getElementById('speed-value');
+  const btnCenter = document.getElementById('btn-center');
+  const btnGoto = document.getElementById('btn-goto');
+  const btnLock = document.getElementById('btn-lock');
+  const btnCancelRoute = document.getElementById('btn-cancel-route');
+  const btnPause = document.getElementById('btn-pause');
+  const statusIndicator = document.getElementById('status-indicator');
+  const speedSelector = document.getElementById('speed-selector');
+  const btnEditPresets = document.getElementById('btn-edit-presets');
+
+  // --- State ---
+  let isPaused = false;
+  let activePresetId = 'walk'; // preset atualmente ativo (walk/run/car/custom id)
+
+  function getActivePreset() {
+    const presets = Presets.loadAll();
+    return presets.find(function (p) { return p.id === activePresetId; }) || presets[0];
+  }
+
+  // Providers: movement.js e autopilot.js consultam pra decidir se usam
+  // config do carro ou formula padrao.
+  Movement.setActiveKindProvider(function () {
+    const p = getActivePreset();
+    return p ? p.kind : 'walk';
+  });
+  AutoPilot.setActiveKindProvider(function () {
+    const p = getActivePreset();
+    return p ? p.kind : 'walk';
+  });
+
+  // Cadeado de teleporte: trancado por padrao. Destravar da 5s de janela.
+  let teleportLocked = true;
+  let lockReArmTimeoutId = null;
+  let lockCountdownIntervalId = null;
+  const UNLOCK_WINDOW_MS = 5000;
+
+  function isTeleportAllowed() { return !teleportLocked; }
+
+  function updateLockUI(secondsLeft) {
+    if (teleportLocked) {
+      btnLock.textContent = '🔒 Teleporte: BLOQUEADO';
+      btnLock.classList.remove('lock-unlocked');
+      btnLock.classList.add('lock-locked');
+    } else {
+      const sec = typeof secondsLeft === 'number' ? Math.max(1, Math.ceil(secondsLeft)) : 5;
+      btnLock.textContent = '🔓 Teleporte: LIVRE (' + sec + 's)';
+      btnLock.classList.remove('lock-locked');
+      btnLock.classList.add('lock-unlocked');
+    }
+  }
+
+  function clearLockTimers() {
+    if (lockReArmTimeoutId) { clearTimeout(lockReArmTimeoutId); lockReArmTimeoutId = null; }
+    if (lockCountdownIntervalId) { clearInterval(lockCountdownIntervalId); lockCountdownIntervalId = null; }
+  }
+
+  function unlockTeleportTemporarily() {
+    teleportLocked = false;
+    clearLockTimers();
+    updateLockUI(5);
+    const start = Date.now();
+    lockCountdownIntervalId = setInterval(function () {
+      const elapsed = Date.now() - start;
+      const left = (UNLOCK_WINDOW_MS - elapsed) / 1000;
+      if (left <= 0) {
+        clearLockTimers();
+        teleportLocked = true;
+        updateLockUI();
+      } else {
+        updateLockUI(left);
+      }
+    }, 200);
+  }
+
+  function lockTeleportNow() {
+    teleportLocked = true;
+    clearLockTimers();
+    updateLockUI();
+  }
+
+  btnLock.addEventListener('click', function () {
+    if (teleportLocked) unlockTeleportTemporarily();
+    else lockTeleportNow();
+  });
+  updateLockUI();
+
+  // --- Presets de velocidade: render dinamico ---
+  // Cada preset = .preset-group com .mode-btn (seleciona) + .preset-gear-btn (config)
+  function renderPresets() {
+    const presets = Presets.loadAll();
+    speedSelector.innerHTML = '';
+    presets.forEach(function (p) {
+      const group = document.createElement('div');
+      group.className = 'preset-group';
+
+      const btn = document.createElement('button');
+      btn.className = 'mode-btn' + (p.id === activePresetId ? ' active' : '');
+      btn.dataset.id = p.id;
+      btn.dataset.kmh = String(p.kmh);
+      btn.dataset.kind = p.kind;
+      btn.innerHTML = '<span class="emoji">' + escapeHtml(p.emoji) + '</span> '
+        + escapeHtml(p.name) + ' <span class="sub">' + p.kmh + ' km/h</span>';
+      btn.addEventListener('click', function () {
+        selectPreset(p.id);
+      });
+
+      const gearBtn = document.createElement('button');
+      gearBtn.className = 'preset-gear-btn';
+      gearBtn.title = 'Configuracoes de "' + p.name + '"';
+      gearBtn.textContent = '⚙';
+      gearBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openPresetConfig(p);
+      });
+
+      group.appendChild(btn);
+      group.appendChild(gearBtn);
+      speedSelector.appendChild(group);
+    });
+  }
+
+  function selectPreset(id) {
+    const presets = Presets.loadAll();
+    const p = presets.find(function (x) { return x.id === id; });
+    if (!p) return;
+    activePresetId = id;
+    Movement.setMaxSpeedKmh(p.kmh);
+    const sliderMax = parseFloat(speedSlider.max);
+    speedSlider.value = Math.min(p.kmh, sliderMax);
+    speedValue.textContent = p.kmh.toFixed(1);
+    speedSelector.querySelectorAll('.mode-btn').forEach(function (b) {
+      b.classList.toggle('active', b.dataset.id === id);
+    });
+    saveNow();
+  }
+
+  renderPresets();
+
+  // --- Init: carrega posicao salva ou usa Paulista default ---
+  (function initPosition() {
+    const saved = Persistence.load();
+    if (saved) {
+      Movement.init(saved.lat, saved.lon);
+      if (typeof saved.maxSpeedKmh === 'number') {
+        Movement.setMaxSpeedKmh(saved.maxSpeedKmh);
+        const sliderMax = parseFloat(speedSlider.max);
+        speedSlider.value = Math.min(saved.maxSpeedKmh, sliderMax);
+        speedValue.textContent = saved.maxSpeedKmh.toFixed(1);
+      }
+      // Reflete preset ativo pelo kmh salvo
+      renderPresets();
+      // Centra o mapa na posicao salva
+      Map.map.setView([saved.lat, saved.lon], Map.map.getZoom());
+      // Restaura estado de pausa
+      if (saved.paused) {
+        isPaused = true;
+        updatePauseUI();
+      }
+      // Restaura preset ativo + humanidade
+      if (saved.activePresetId) {
+        activePresetId = saved.activePresetId;
+      }
+      if (saved.humanityEnabled) {
+        Humanity.enable();
+      }
+      renderPresets();
+      console.log('[Fake GPS PC] posicao restaurada:', saved.lat.toFixed(6), saved.lon.toFixed(6));
+    } else {
+      Movement.init(Map.startPosition.lat, Map.startPosition.lon);
+    }
+  })();
+
+  // --- UI wiring ---
+  speedSlider.addEventListener('input', function () {
+    const v = parseFloat(speedSlider.value);
+    speedValue.textContent = v.toFixed(1);
+    Movement.setMaxSpeedKmh(v);
+    // Sincroniza selecao visual: se slider bate exato em algum preset, destaca
+    const presets = Presets.loadAll();
+    speedSelector.querySelectorAll('.mode-btn').forEach(function (b) { b.classList.remove('active'); });
+    const match = presets.find(function (p) { return Math.abs(v - p.kmh) < 0.1; });
+    if (match) {
+      activePresetId = match.id;
+      const btn = speedSelector.querySelector('[data-id="' + match.id + '"]');
+      if (btn) btn.classList.add('active');
+    }
+  });
+
+  // --- Modal editar presets ---
+  const modalPresets = document.getElementById('modal-presets');
+  const presetsListEl = document.getElementById('presets-list');
+  const modalPresetsError = document.getElementById('modal-presets-error');
+
+  let draftPresets = [];
+
+  function renderPresetsEditor() {
+    presetsListEl.innerHTML = '';
+    draftPresets.forEach(function (p, idx) {
+      const row = document.createElement('div');
+      row.className = 'preset-row';
+      row.innerHTML = [
+        '<input class="preset-emoji" value="', escapeHtml(p.emoji), '" maxlength="4" title="Emoji">',
+        '<input class="preset-name" value="', escapeHtml(p.name), '" maxlength="20" placeholder="Nome">',
+        '<input class="preset-kmh" type="number" min="0.5" max="200" step="0.5" value="', p.kmh, '">',
+        '<span class="preset-kmh-unit">km/h</span>',
+        '<button data-action="remove" title="Remover">✕</button>'
+      ].join('');
+      row.querySelector('.preset-emoji').addEventListener('input', function (e) {
+        draftPresets[idx].emoji = e.target.value;
+      });
+      row.querySelector('.preset-name').addEventListener('input', function (e) {
+        draftPresets[idx].name = e.target.value;
+      });
+      row.querySelector('.preset-kmh').addEventListener('input', function (e) {
+        draftPresets[idx].kmh = parseFloat(e.target.value) || 0;
+      });
+      row.querySelector('[data-action="remove"]').addEventListener('click', function () {
+        draftPresets.splice(idx, 1);
+        renderPresetsEditor();
+      });
+      presetsListEl.appendChild(row);
+    });
+  }
+
+  function openPresetsModal() {
+    draftPresets = Presets.loadAll().map(function (p) {
+      return { id: p.id, name: p.name, emoji: p.emoji, kmh: p.kmh };
+    });
+    modalPresetsError.classList.add('hidden');
+    renderPresetsEditor();
+    modalPresets.classList.remove('hidden');
+  }
+  function closePresetsModal() { modalPresets.classList.add('hidden'); }
+
+  function savePresets() {
+    // Validacao
+    for (const p of draftPresets) {
+      if (!p.name || !p.name.trim()) {
+        modalPresetsError.textContent = 'Todos os presets precisam ter nome.';
+        modalPresetsError.classList.remove('hidden');
+        return;
+      }
+      if (!(p.kmh > 0 && p.kmh <= 200)) {
+        modalPresetsError.textContent = 'Velocidade deve ser entre 0.5 e 200 km/h.';
+        modalPresetsError.classList.remove('hidden');
+        return;
+      }
+    }
+    Presets.replaceAll(draftPresets);
+    renderPresets();
+    closePresetsModal();
+  }
+
+  btnEditPresets.addEventListener('click', openPresetsModal);
+  document.getElementById('btn-add-preset').addEventListener('click', function () {
+    draftPresets.push({
+      id: 'p_' + Date.now(),
+      name: 'Novo',
+      emoji: '🏷️',
+      kmh: 10
+    });
+    renderPresetsEditor();
+  });
+  document.getElementById('modal-presets-cancel').addEventListener('click', closePresetsModal);
+  document.getElementById('modal-presets-save').addEventListener('click', savePresets);
+  document.getElementById('modal-presets-reset').addEventListener('click', function () {
+    draftPresets = Presets.DEFAULT_PRESETS.map(function (p) {
+      return { id: p.id, name: p.name, emoji: p.emoji, kmh: p.kmh };
+    });
+    modalPresetsError.classList.add('hidden');
+    renderPresetsEditor();
+  });
+  modalPresets.addEventListener('click', function (e) {
+    if (e.target === modalPresets) closePresetsModal();
+  });
+
+  btnCenter.addEventListener('click', function () {
+    Map.centerOnMarker(true);
+  });
+
+  btnPause.addEventListener('click', function () {
+    isPaused = !isPaused;
+    updatePauseUI();
+    saveNow(); // persiste estado imediatamente
+  });
+
+  // --- Estado de orientacao do celular (DeviceOrientationEvent) ---
+  const ORIENTATION_STORAGE_KEY = 'fake-gps-pc:orientation';
+  const DEFAULT_ORIENTATION = { alpha: 0, beta: 70, gamma: 0, alphaFromHeading: true };
+
+  function loadOrientationState() {
+    try {
+      const raw = localStorage.getItem(ORIENTATION_STORAGE_KEY);
+      if (raw) {
+        const o = JSON.parse(raw);
+        if (o && typeof o === 'object'
+            && typeof o.alpha === 'number' && typeof o.beta === 'number' && typeof o.gamma === 'number') {
+          return {
+            alpha: o.alpha, beta: o.beta, gamma: o.gamma,
+            alphaFromHeading: o.alphaFromHeading !== false
+          };
+        }
+      }
+    } catch (e) { /* silencio */ }
+    return Object.assign({}, DEFAULT_ORIENTATION);
+  }
+  function saveOrientationState() {
+    try { localStorage.setItem(ORIENTATION_STORAGE_KEY, JSON.stringify(orientationState)); } catch (e) {}
+  }
+
+  let orientationState = loadOrientationState();
+
+  // --- Modal 3D de orientacao ---
+  const modalOrientation = document.getElementById('modal-orientation');
+  const btnOrientation = document.getElementById('btn-orientation');
+  const phone3d = document.getElementById('phone-3d');
+  const oriAlpha = document.getElementById('ori-alpha');
+  const oriBeta = document.getElementById('ori-beta');
+  const oriGamma = document.getElementById('ori-gamma');
+  const oriAlphaVal = document.getElementById('ori-alpha-val');
+  const oriBetaVal = document.getElementById('ori-beta-val');
+  const oriGammaVal = document.getElementById('ori-gamma-val');
+  const oriAlphaFromHeading = document.getElementById('ori-alpha-from-heading');
+
+  // Converte alpha 0-360 (interno/W3C) pra -180..180 (slider UI).
+  // 0° fica no centro do slider, 90° a direita (CCW), -90° a esquerda (CW).
+  function alphaToSlider(a) {
+    let v = a % 360;
+    if (v > 180) v -= 360;
+    return v;
+  }
+  function sliderToAlpha(v) {
+    let a = v % 360;
+    if (a < 0) a += 360;
+    return a;
+  }
+
+  function applyOrientationToUI() {
+    const a = orientationState.alpha;
+    const b = orientationState.beta;
+    const g = orientationState.gamma;
+    // Ordem Z-X'-Y'' (DeviceOrientation spec). CSS aplica da direita pra esquerda.
+    phone3d.style.transform = 'rotateZ(' + a + 'deg) rotateX(' + b + 'deg) rotateY(' + g + 'deg)';
+    oriAlpha.value = alphaToSlider(a);
+    oriBeta.value = b;
+    oriGamma.value = g;
+    const sliderA = alphaToSlider(a);
+    oriAlphaVal.textContent = sliderA.toFixed(0) + '°';
+    oriBetaVal.textContent = b.toFixed(0) + '°';
+    oriGammaVal.textContent = g.toFixed(0) + '°';
+    oriAlphaFromHeading.checked = orientationState.alphaFromHeading;
+  }
+
+  function openOrientationModal() {
+    applyOrientationToUI();
+    modalOrientation.classList.remove('hidden');
+  }
+  function closeOrientationModal() { modalOrientation.classList.add('hidden'); }
+
+  btnOrientation.addEventListener('click', openOrientationModal);
+  document.getElementById('modal-ori-close').addEventListener('click', closeOrientationModal);
+  modalOrientation.addEventListener('click', function (e) {
+    if (e.target === modalOrientation) closeOrientationModal();
+  });
+
+  document.getElementById('modal-ori-reset').addEventListener('click', function () {
+    orientationState = Object.assign({}, DEFAULT_ORIENTATION);
+    applyOrientationToUI();
+    saveOrientationState();
+  });
+
+  // Sliders
+  oriAlpha.addEventListener('input', function (e) {
+    // Slider range: -180..180. Converte pro interno 0..360 (W3C).
+    orientationState.alpha = sliderToAlpha(parseFloat(e.target.value) || 0);
+    if (orientationState.alphaFromHeading) {
+      // Se usuario mexe no slider manualmente, desacopla
+      orientationState.alphaFromHeading = false;
+      oriAlphaFromHeading.checked = false;
+    }
+    applyOrientationToUI();
+    saveOrientationState();
+  });
+  oriBeta.addEventListener('input', function (e) {
+    orientationState.beta = parseFloat(e.target.value) || 0;
+    applyOrientationToUI();
+    saveOrientationState();
+  });
+  oriGamma.addEventListener('input', function (e) {
+    orientationState.gamma = parseFloat(e.target.value) || 0;
+    applyOrientationToUI();
+    saveOrientationState();
+  });
+  oriAlphaFromHeading.addEventListener('change', function (e) {
+    orientationState.alphaFromHeading = e.target.checked;
+    saveOrientationState();
+  });
+
+  // Drag do celular 3D: dy -> beta, dx -> gamma, Shift+drag -> alpha
+  let oriDrag = { active: false, x0: 0, y0: 0, a0: 0, b0: 0, g0: 0 };
+  phone3d.addEventListener('mousedown', function (e) {
+    oriDrag.active = true;
+    oriDrag.x0 = e.clientX;
+    oriDrag.y0 = e.clientY;
+    oriDrag.a0 = orientationState.alpha;
+    oriDrag.b0 = orientationState.beta;
+    oriDrag.g0 = orientationState.gamma;
+    phone3d.classList.add('dragging');
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', function (e) {
+    if (!oriDrag.active) return;
+    const dx = e.clientX - oriDrag.x0;
+    const dy = e.clientY - oriDrag.y0;
+    if (e.shiftKey) {
+      // Shift: rotate alpha (sensibilidade reduzida)
+      let a = (oriDrag.a0 + dx * 0.3) % 360;
+      if (a < 0) a += 360;
+      orientationState.alpha = a;
+      if (orientationState.alphaFromHeading) {
+        orientationState.alphaFromHeading = false;
+        oriAlphaFromHeading.checked = false;
+      }
+    } else {
+      // Normal: dy invertido -> beta (arrastar pra cima = topo pra frente),
+      //         dx -> gamma. Sensibilidade reduzida.
+      orientationState.beta = Math.max(-180, Math.min(180, oriDrag.b0 - dy * 0.3));
+      orientationState.gamma = Math.max(-90, Math.min(90, oriDrag.g0 + dx * 0.2));
+    }
+    applyOrientationToUI();
+  });
+  window.addEventListener('mouseup', function () {
+    if (oriDrag.active) {
+      oriDrag.active = false;
+      phone3d.classList.remove('dragging');
+      saveOrientationState();
+    }
+  });
+
+  // --- Velocimetro visual ---
+  // Cor progressiva: < 60% max = verde (default), 60-90% = amarelo, > 90% = vermelho
+  function updateSpeedometer(speedKmh) {
+    const max = parseFloat(speedSlider.value) || 1;
+    const ratio = speedKmh / max;
+    speedoValue.textContent = speedKmh.toFixed(1);
+    speedoValue.classList.remove('mid', 'high');
+    if (ratio >= 0.9) speedoValue.classList.add('high');
+    else if (ratio >= 0.6) speedoValue.classList.add('mid');
+    speedoMax.textContent = 'max ' + max.toFixed(0);
+  }
+  updateSpeedometer(0);
+
+  // --- Humanidade: provider ---
+  Humanity.setIsMovingProvider(function () {
+    return Movement.getRaw().speedMps > 0.3;
+  });
+
+  // --- Dispatcher: ⚙ dos presets abre modal correto ---
+  function openPresetConfig(preset) {
+    if (preset.kind === 'walk' || preset.kind === 'run') {
+      openSettings(preset);
+    } else if (preset.kind === 'car') {
+      openCarConfig();
+    } else {
+      openGenericPresetModal();
+    }
+  }
+
+  // Modal generico pra preset custom
+  const modalGeneric = document.getElementById('modal-preset-generic');
+  function openGenericPresetModal() { modalGeneric.classList.remove('hidden'); }
+  function closeGenericPresetModal() { modalGeneric.classList.add('hidden'); }
+  document.getElementById('modal-preset-generic-ok').addEventListener('click', closeGenericPresetModal);
+  modalGeneric.addEventListener('click', function (e) {
+    if (e.target === modalGeneric) closeGenericPresetModal();
+  });
+
+  // --- Modal de configuracoes de Humanidade (abre via ⚙ Walk/Run) ---
+  const modalSettings = document.getElementById('modal-settings');
+  const modalSettingsTitle = document.getElementById('modal-settings-title');
+  const cfgHumanityEnabled = document.getElementById('cfg-humanityEnabled');
+  const modalSettingsError = document.getElementById('modal-settings-error');
+  const cfgFields = {
+    checkIntervalMinMs: document.getElementById('cfg-checkIntervalMin'),
+    checkIntervalMaxMs: document.getElementById('cfg-checkIntervalMax'),
+    trafficStopChance: document.getElementById('cfg-trafficStopChance'),
+    trafficStopMinMs: document.getElementById('cfg-trafficStopMin'),
+    trafficStopMaxMs: document.getElementById('cfg-trafficStopMax'),
+    microPauseChance: document.getElementById('cfg-microPauseChance'),
+    microPauseMinMs: document.getElementById('cfg-microPauseMin'),
+    microPauseMaxMs: document.getElementById('cfg-microPauseMax')
+  };
+
+  function fillSettingsForm() {
+    const cfg = Humanity.getConfig();
+    cfgHumanityEnabled.checked = Humanity.isEnabled();
+    cfgFields.checkIntervalMinMs.value = (cfg.checkIntervalMinMs / 1000).toFixed(0);
+    cfgFields.checkIntervalMaxMs.value = (cfg.checkIntervalMaxMs / 1000).toFixed(0);
+    cfgFields.trafficStopChance.value = (cfg.trafficStopChance * 100).toFixed(0);
+    cfgFields.trafficStopMinMs.value = (cfg.trafficStopMinMs / 1000).toFixed(0);
+    cfgFields.trafficStopMaxMs.value = (cfg.trafficStopMaxMs / 1000).toFixed(0);
+    cfgFields.microPauseChance.value = (cfg.microPauseChance * 100).toFixed(0);
+    cfgFields.microPauseMinMs.value = (cfg.microPauseMinMs / 1000).toFixed(1);
+    cfgFields.microPauseMaxMs.value = (cfg.microPauseMaxMs / 1000).toFixed(1);
+  }
+
+  function openSettings(preset) {
+    fillSettingsForm();
+    if (preset) {
+      modalSettingsTitle.textContent = '⚙️ Humanidade - ' + preset.emoji + ' ' + preset.name;
+    } else {
+      modalSettingsTitle.textContent = '⚙️ Humanidade (pedestre)';
+    }
+    modalSettingsError.classList.add('hidden');
+    modalSettings.classList.remove('hidden');
+  }
+
+  function closeSettings() { modalSettings.classList.add('hidden'); }
+
+  function saveSettings() {
+    const patch = {
+      checkIntervalMinMs: parseFloat(cfgFields.checkIntervalMinMs.value) * 1000,
+      checkIntervalMaxMs: parseFloat(cfgFields.checkIntervalMaxMs.value) * 1000,
+      trafficStopChance: parseFloat(cfgFields.trafficStopChance.value) / 100,
+      trafficStopMinMs: parseFloat(cfgFields.trafficStopMinMs.value) * 1000,
+      trafficStopMaxMs: parseFloat(cfgFields.trafficStopMaxMs.value) * 1000,
+      microPauseChance: parseFloat(cfgFields.microPauseChance.value) / 100,
+      microPauseMinMs: parseFloat(cfgFields.microPauseMinMs.value) * 1000,
+      microPauseMaxMs: parseFloat(cfgFields.microPauseMaxMs.value) * 1000
+    };
+    const ok = Humanity.setConfig(patch);
+    if (!ok) {
+      modalSettingsError.textContent = 'Valores invalidos. Verifique: min <= max, chances entre 0 e 100%, numeros positivos.';
+      modalSettingsError.classList.remove('hidden');
+      return;
+    }
+    // Aplica toggle de habilitado/desabilitado
+    if (cfgHumanityEnabled.checked) Humanity.enable();
+    else Humanity.disable();
+    saveNow();
+    closeSettings();
+  }
+
+  function resetSettings() {
+    Humanity.resetConfig();
+    fillSettingsForm();
+    modalSettingsError.classList.add('hidden');
+  }
+
+  document.getElementById('modal-settings-cancel').addEventListener('click', closeSettings);
+  document.getElementById('modal-settings-save').addEventListener('click', saveSettings);
+  document.getElementById('modal-settings-reset').addEventListener('click', resetSettings);
+  modalSettings.addEventListener('click', function (e) {
+    if (e.target === modalSettings) closeSettings();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (!modalSettings.classList.contains('hidden') && e.key === 'Escape') closeSettings();
+  });
+
+  // --- Modal de configuracoes do Carro (abre via ⚙ do preset Carro) ---
+  const modalCar = document.getElementById('modal-car');
+  const modalCarError = document.getElementById('modal-car-error');
+  const carFields = {
+    accelSeconds: document.getElementById('car-accelSeconds'),
+    curveSlowdownMin: document.getElementById('car-curveSlowdownMin'),
+    approachMeters: document.getElementById('car-approachMeters'),
+    trafficStopChance: document.getElementById('car-trafficStopChance'),
+    trafficStopMinMs: document.getElementById('car-trafficStopMin'),
+    trafficStopMaxMs: document.getElementById('car-trafficStopMax')
+  };
+
+  function fillCarForm() {
+    const c = CarConfig.getConfig();
+    carFields.accelSeconds.value = c.accelSeconds.toFixed(1);
+    carFields.curveSlowdownMin.value = c.curveSlowdownMin.toFixed(2);
+    carFields.approachMeters.value = c.approachMeters.toFixed(0);
+    carFields.trafficStopChance.value = (c.trafficStopChance * 100).toFixed(0);
+    carFields.trafficStopMinMs.value = (c.trafficStopMinMs / 1000).toFixed(0);
+    carFields.trafficStopMaxMs.value = (c.trafficStopMaxMs / 1000).toFixed(0);
+  }
+  function openCarConfig() {
+    fillCarForm();
+    modalCarError.classList.add('hidden');
+    modalCar.classList.remove('hidden');
+  }
+  function closeCarConfig() { modalCar.classList.add('hidden'); }
+  function saveCarConfig() {
+    const patch = {
+      accelSeconds: parseFloat(carFields.accelSeconds.value),
+      curveSlowdownMin: parseFloat(carFields.curveSlowdownMin.value),
+      approachMeters: parseFloat(carFields.approachMeters.value),
+      trafficStopChance: parseFloat(carFields.trafficStopChance.value) / 100,
+      trafficStopMinMs: parseFloat(carFields.trafficStopMinMs.value) * 1000,
+      trafficStopMaxMs: parseFloat(carFields.trafficStopMaxMs.value) * 1000
+    };
+    const ok = CarConfig.setConfig(patch);
+    if (!ok) {
+      modalCarError.textContent = 'Valores invalidos. Verifique: aceleracao 0.1-30, curve 0.05-1, chance 0-100%, min <= max.';
+      modalCarError.classList.remove('hidden');
+      return;
+    }
+    closeCarConfig();
+  }
+  document.getElementById('modal-car-cancel').addEventListener('click', closeCarConfig);
+  document.getElementById('modal-car-save').addEventListener('click', saveCarConfig);
+  document.getElementById('modal-car-reset').addEventListener('click', function () {
+    CarConfig.resetConfig();
+    fillCarForm();
+    modalCarError.classList.add('hidden');
+  });
+  modalCar.addEventListener('click', function (e) {
+    if (e.target === modalCar) closeCarConfig();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (!modalCar.classList.contains('hidden') && e.key === 'Escape') closeCarConfig();
+  });
+
+  // --- Barra indicadora de pausa (motivo + countdown) ---
+  const pauseBar = document.getElementById('pause-bar');
+  const pauseIcon = document.getElementById('pause-icon');
+  const pauseText = document.getElementById('pause-text');
+  const pauseCountdown = document.getElementById('pause-countdown');
+
+  function formatCountdown(ms) {
+    const total = Math.ceil(ms / 1000);
+    const mm = Math.floor(total / 60).toString().padStart(2, '0');
+    const ss = (total % 60).toString().padStart(2, '0');
+    return mm + ':' + ss;
+  }
+
+  function updatePauseBar() {
+    if (isPaused) {
+      pauseBar.classList.remove('hidden');
+      pauseIcon.textContent = '⏸';
+      pauseText.textContent = 'Pausado manualmente';
+      pauseCountdown.textContent = '--:--';
+      return;
+    }
+    if (Humanity.isSimulatedPaused()) {
+      const type = Humanity.currentPauseType();
+      pauseBar.classList.remove('hidden');
+      if (type === 'traffic') {
+        pauseIcon.textContent = '🚦';
+        pauseText.textContent = 'Esperando sinal / cruzamento';
+      } else {
+        pauseIcon.textContent = '⏱';
+        pauseText.textContent = 'Micropausa (olhando celular)';
+      }
+      pauseCountdown.textContent = formatCountdown(Humanity.remainingMs());
+      return;
+    }
+    pauseBar.classList.add('hidden');
+  }
+
+  // Atualiza a barra a 2Hz (suficiente pro countdown de segundos)
+  setInterval(updatePauseBar, 500);
+
+  // Provider pro map saber se mostra ou esconde o botao de teleport no popup
+  Map.setTeleportLockProvider(function () { return teleportLocked; });
+
+  // --- Teleporte via click no mapa ---
+  Map.onAction('teleport', function (lat, lon) {
+    if (!isTeleportAllowed()) {
+      console.warn('[Fake GPS PC] teleporte bloqueado (cadeado trancado)');
+      return;
+    }
+    // Cancela auto-walk se tiver ativo (teleporte invalida a rota)
+    if (AutoPilot.isActive()) {
+      AutoPilot.stop();
+      Map.clearRoute();
+      btnCancelRoute.classList.add('hidden');
+    }
+    Movement.teleport(lat, lon);
+    saveNow();
+    // Re-trava imediatamente apos usar (defesa extra)
+    lockTeleportNow();
+    console.log('[Fake GPS PC] teleportado para', lat.toFixed(6), lon.toFixed(6));
+  });
+
+  // --- Rota automatica (OSRM foot) ---
+  Map.onAction('route', async function (lat, lon) {
+    // Cancela rota anterior se tiver
+    if (AutoPilot.isActive()) {
+      AutoPilot.stop();
+      Map.clearRoute();
+    }
+    const pos = Movement.getRaw();
+    try {
+      console.log('[AutoPilot] buscando rota a pe...');
+      const route = await Routing.fetchFootRoute(pos.lat, pos.lon, lat, lon);
+      Map.drawRoute(route.waypoints);
+      const started = AutoPilot.start(route.waypoints, {
+        onComplete: function () {
+          console.log('[AutoPilot] chegou no destino');
+          Map.clearRoute();
+          btnCancelRoute.classList.add('hidden');
+          saveNow();
+        },
+        onProgress: function (current, total) {
+          // Log a cada 10 waypoints
+          if (current % 10 === 0) console.log('[AutoPilot] ' + current + '/' + total);
+        }
+      });
+      if (started) {
+        btnCancelRoute.classList.remove('hidden');
+        const km = (route.distanceMeters / 1000).toFixed(2);
+        const min = Math.round(route.durationSeconds / 60);
+        console.log('[AutoPilot] rota de ' + route.waypoints.length + ' pontos (' + km + ' km, ~' + min + ' min)');
+      }
+    } catch (err) {
+      console.error('[AutoPilot] erro:', err.message);
+      alert('Nao foi possivel calcular a rota: ' + err.message);
+    }
+  });
+
+  btnCancelRoute.addEventListener('click', function () {
+    AutoPilot.stop();
+    Map.clearRoute();
+    btnCancelRoute.classList.add('hidden');
+    console.log('[AutoPilot] rota cancelada pelo usuario');
+  });
+
+  // --- Crates: recebe lista do servidor local (via extension) e renderiza no mapa ---
+  async function routeToCrate(crate) {
+    if (AutoPilot.isActive()) {
+      AutoPilot.stop();
+      Map.clearRoute();
+    }
+    const pos = Movement.getRaw();
+    try {
+      console.log('[Crates] rota ate crate', crate.id);
+      const route = await Routing.fetchFootRoute(pos.lat, pos.lon, crate.lat, crate.lon);
+      Map.drawRoute(route.waypoints);
+      AutoPilot.start(route.waypoints, {
+        onComplete: function () {
+          console.log('[Crates] chegou na crate', crate.id);
+          Map.clearRoute();
+          btnCancelRoute.classList.add('hidden');
+          saveNow();
+        }
+      });
+      btnCancelRoute.classList.remove('hidden');
+      const km = (route.distanceMeters / 1000).toFixed(2);
+      console.log('[Crates] rota de ' + route.waypoints.length + ' pontos (' + km + ' km)');
+    } catch (err) {
+      console.error('[Crates] erro:', err.message);
+      alert('Nao foi possivel calcular a rota ate a crate: ' + err.message);
+    }
+  }
+
+  Map.onCrateAction(function (crate) {
+    routeToCrate(crate);
+  });
+
+  // Toggle da rota planejada (adicionar/remover crate)
+  Map.setPlannedRouteChecker(function (crateId) {
+    return RoutePlanner.indexOf(crateId);
+  });
+  Map.onCrateToggleRoute(function (crate) {
+    RoutePlanner.toggle({
+      id: crate.id,
+      lat: crate.lat,
+      lon: crate.lon,
+      label: crate.id.substring(0, 20)
+    });
+  });
+
+  // --- Pontos custom na rota (click no mapa → ➕ Adicionar a rota) ---
+  const CUSTOM_PREFIX = 'custom:';
+  function isCustomStop(id) { return typeof id === 'string' && id.indexOf(CUSTOM_PREFIX) === 0; }
+
+  Map.onAction('add-to-route', function (lat, lon) {
+    const id = CUSTOM_PREFIX + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+    RoutePlanner.add({ id: id, lat: lat, lon: lon, label: '' });
+  });
+
+  Map.onCustomPinRemove(function (id) {
+    RoutePlanner.remove(id);
+  });
+
+  // Re-renderiza os pins azuis sempre que a rota muda (ordem/add/remove)
+  function syncCustomPins() {
+    const stops = RoutePlanner.all();
+    const list = [];
+    stops.forEach(function (s, idx) {
+      if (isCustomStop(s.id)) {
+        list.push({ id: s.id, lat: s.lat, lon: s.lon, routeIndex: idx });
+      }
+    });
+    Map.renderCustomPins(list);
+  }
+
+  if (window.FakeGPSBridge && typeof window.FakeGPSBridge.onCrates === 'function') {
+    window.FakeGPSBridge.onCrates(function (payload) {
+      if (!payload || !Array.isArray(payload.crates)) return;
+      Crates.update(payload.crates);
+      Map.renderCrates(Crates.all());
+      console.log('[Crates] ' + Crates.count() + ' crates recebidas (' + Crates.available().length + ' disponiveis)');
+    });
+  }
+
+  // --- Planejador de rota multi-stop ---
+  const panelRoutePlanner = document.getElementById('route-planner-panel');
+  const routePlannerCountEl = document.getElementById('route-planner-count');
+  const routePlannerDistEl = document.getElementById('route-planner-dist');
+  const routePlannerListEl = document.getElementById('route-planner-list');
+  const btnRouteStart = document.getElementById('btn-route-start');
+  const btnRouteClear = document.getElementById('btn-route-clear');
+
+  let plannedRouteData = null; // { waypoints, distanceMeters, ... } ou null
+
+  function formatETA(meters, kmh) {
+    if (!meters || !kmh || kmh <= 0) return '';
+    const seconds = (meters / 1000) / kmh * 3600;
+    if (seconds < 60) return '~' + Math.round(seconds) + 's';
+    const totalMin = Math.round(seconds / 60);
+    if (totalMin < 60) return '~' + totalMin + ' min';
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    return '~' + h + 'h ' + m + 'min';
+  }
+
+  function updateRouteStartButton() {
+    const active = AutoPilot.isActive();
+    if (active) {
+      btnRouteStart.textContent = '⏸ Parar rota';
+      btnRouteStart.classList.remove('route-planner-btn-primary');
+      btnRouteStart.classList.add('route-planner-btn-danger');
+    } else {
+      btnRouteStart.textContent = '▶ Iniciar';
+      btnRouteStart.classList.remove('route-planner-btn-danger');
+      btnRouteStart.classList.add('route-planner-btn-primary');
+    }
+  }
+
+  function renderRoutePlannerList() {
+    const stops = RoutePlanner.all();
+    if (stops.length === 0) {
+      panelRoutePlanner.classList.add('hidden');
+      Map.renderCrates(Crates.all()); // re-render crates sem numeracao
+      Map.clearPlannedRoute();
+      return;
+    }
+    panelRoutePlanner.classList.remove('hidden');
+    const totalKm = plannedRouteData && plannedRouteData.distanceMeters
+      ? (plannedRouteData.distanceMeters / 1000).toFixed(2) + ' km'
+      : '';
+    const speedKmh = parseFloat(speedSlider.value) || 5;
+    const etaStr = plannedRouteData && plannedRouteData.distanceMeters
+      ? formatETA(plannedRouteData.distanceMeters, speedKmh)
+      : '';
+    routePlannerCountEl.textContent = stops.length + ' stop' + (stops.length === 1 ? '' : 's');
+    routePlannerDistEl.innerHTML = totalKm
+      ? '· ' + totalKm + ' <span class="route-planner-eta">· ' + etaStr + '</span>'
+      : '';
+
+    routePlannerListEl.innerHTML = '';
+    stops.forEach(function (s, idx) {
+      const pos = Movement.getRaw();
+      const prev = idx === 0 ? { lat: pos.lat, lon: pos.lon } : stops[idx - 1];
+      const segDist = Crates.distanceMeters(prev.lat, prev.lon, s.lat, s.lon);
+
+      const row = document.createElement('div');
+      row.className = 'route-planner-item';
+      row.setAttribute('draggable', 'true');
+      row.dataset.stopId = s.id;
+      const isCustom = isCustomStop(s.id);
+      // Numeracao de pontos custom e automatica: posicao sequencial entre custom stops
+      let customNumber = 0;
+      if (isCustom) {
+        for (let k = 0; k <= idx; k++) if (isCustomStop(stops[k].id)) customNumber++;
+      }
+      const emoji = isCustom ? '📍' : '📦';
+      const displayLabel = isCustom ? 'Ponto ' + customNumber : escapeHtml(s.label);
+      const titleAttr = isCustom
+        ? s.lat.toFixed(5) + ', ' + s.lon.toFixed(5)
+        : escapeHtml(s.id);
+      row.innerHTML = [
+        '<span class="route-planner-idx">', idx + 1, '</span>',
+        '<span class="route-planner-label" title="', titleAttr, '">', emoji, ' ', displayLabel, '</span>',
+        '<span class="route-planner-item-dist">', Math.round(segDist), 'm</span>',
+        '<button class="route-planner-item-btn" data-action="up" ', (idx === 0 ? 'disabled' : ''), ' title="Subir">↑</button>',
+        '<button class="route-planner-item-btn" data-action="down" ', (idx === stops.length - 1 ? 'disabled' : ''), ' title="Descer">↓</button>',
+        '<button class="route-planner-item-btn delete" data-action="remove" title="Remover">✕</button>'
+      ].join('');
+      row.querySelector('[data-action="up"]').addEventListener('click', function () { RoutePlanner.move(s.id, -1); });
+      row.querySelector('[data-action="down"]').addEventListener('click', function () { RoutePlanner.move(s.id, +1); });
+      row.querySelector('[data-action="remove"]').addEventListener('click', function () { RoutePlanner.remove(s.id); });
+
+      // Drag & drop handlers
+      row.addEventListener('dragstart', function (e) {
+        row.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', s.id);
+      });
+      row.addEventListener('dragend', function () {
+        row.classList.remove('dragging');
+        routePlannerListEl.querySelectorAll('.route-planner-item').forEach(function (el) {
+          el.classList.remove('drag-over');
+        });
+      });
+      row.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        row.classList.add('drag-over');
+      });
+      row.addEventListener('dragleave', function () {
+        row.classList.remove('drag-over');
+      });
+      row.addEventListener('drop', function (e) {
+        e.preventDefault();
+        row.classList.remove('drag-over');
+        const draggedId = e.dataTransfer.getData('text/plain');
+        if (!draggedId || draggedId === s.id) return;
+        // Reinsere o dragged na posicao do item alvo
+        const fromIdx = RoutePlanner.indexOf(draggedId);
+        const toIdx = RoutePlanner.indexOf(s.id);
+        if (fromIdx < 0 || toIdx < 0) return;
+        const delta = toIdx - fromIdx;
+        const step = Math.sign(delta);
+        for (let i = 0; i < Math.abs(delta); i++) {
+          RoutePlanner.move(draggedId, step);
+        }
+      });
+
+      routePlannerListEl.appendChild(row);
+    });
+
+    btnRouteStart.disabled = stops.length < 1;
+    updateRouteStartButton();
+  }
+
+  async function recalcPlannedRoute() {
+    const stops = RoutePlanner.all();
+    if (stops.length === 0) {
+      plannedRouteData = null;
+      Map.clearPlannedRoute();
+      Map.renderCrates(Crates.all());
+      renderRoutePlannerList();
+      return;
+    }
+    const origin = Movement.getRaw();
+    // Pontos: posicao atual -> cada crate em ordem
+    const points = [{ lat: origin.lat, lon: origin.lon }].concat(stops.map(function (s) {
+      return { lat: s.lat, lon: s.lon };
+    }));
+    try {
+      const route = await Routing.fetchMultiFootRoute(points);
+      plannedRouteData = route;
+      Map.drawPlannedRoute(route.waypoints);
+    } catch (err) {
+      console.warn('[RoutePlanner] falha ao calcular rota:', err.message);
+      plannedRouteData = null;
+      Map.clearPlannedRoute();
+    }
+    // Re-render crates com numeracao da rota + lista
+    Map.renderCrates(Crates.all());
+    renderRoutePlannerList();
+  }
+
+  RoutePlanner.onChange(function () {
+    recalcPlannedRoute();
+    syncCustomPins();
+  });
+  syncCustomPins(); // sync inicial (caso tenha pontos custom persistidos)
+
+  btnRouteClear.addEventListener('click', function () {
+    RoutePlanner.clear();
+  });
+
+  btnRouteStart.addEventListener('click', async function () {
+    // Se autopilot ativo, botao vira "parar"
+    if (AutoPilot.isActive()) {
+      AutoPilot.stop();
+      Map.clearRoute();
+      btnCancelRoute.classList.add('hidden');
+      // Rota amarela/preta ja esta visivel (nao e removida ao iniciar)
+      updateRouteStartButton();
+      renderRoutePlannerList();
+      return;
+    }
+
+    const stops = RoutePlanner.all();
+    if (stops.length === 0) return;
+    if (!plannedRouteData || !plannedRouteData.waypoints) {
+      alert('Rota ainda nao calculada. Espera uns segundos.');
+      return;
+    }
+    Map.drawRoute(plannedRouteData.waypoints);
+    // Rota amarela/preta permanece visivel durante autopilot (sobrepoe com a azul pontilhada)
+    const started = AutoPilot.start(plannedRouteData.waypoints, {
+      onComplete: function () {
+        console.log('[RoutePlanner] rota multi-stop concluida');
+        Map.clearRoute();
+        btnCancelRoute.classList.add('hidden');
+        RoutePlanner.clear();
+        updateRouteStartButton();
+        saveNow();
+      }
+    });
+    if (started) {
+      btnCancelRoute.classList.remove('hidden');
+      const km = (plannedRouteData.distanceMeters / 1000).toFixed(2);
+      console.log('[RoutePlanner] iniciada: ' + stops.length + ' stops · ' + km + ' km');
+      updateRouteStartButton();
+    }
+  });
+
+  // ETA recalcula quando velocidade muda
+  speedSlider.addEventListener('input', function () { renderRoutePlannerList(); });
+
+  // Render inicial (caso tenha rota salva no storage)
+  recalcPlannedRoute();
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  // --- Ir para endereco / coordenadas (Nominatim) ---
+  const modalGoto = document.getElementById('modal-goto');
+  const gotoInput = document.getElementById('goto-input');
+  const gotoStatus = document.getElementById('goto-status');
+  const gotoError = document.getElementById('modal-goto-error');
+
+  function openGoto() {
+    gotoInput.value = '';
+    gotoStatus.classList.add('hidden');
+    gotoError.classList.add('hidden');
+    modalGoto.classList.remove('hidden');
+    setTimeout(function () { gotoInput.focus(); }, 50);
+  }
+
+  function closeGoto() {
+    modalGoto.classList.add('hidden');
+  }
+
+  // Tenta parsear "lat, lon" ou "lat,lon" ou "lat lon"
+  function parseCoords(txt) {
+    const m = txt.match(/^\s*(-?\d+(?:\.\d+)?)\s*[,\s]\s*(-?\d+(?:\.\d+)?)\s*$/);
+    if (!m) return null;
+    const lat = parseFloat(m[1]);
+    const lon = parseFloat(m[2]);
+    if (!isFinite(lat) || !isFinite(lon)) return null;
+    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+    return { lat: lat, lon: lon };
+  }
+
+  async function geocodeNominatim(query) {
+    const url = 'https://nominatim.openstreetmap.org/search'
+      + '?q=' + encodeURIComponent(query)
+      + '&format=json&limit=1&addressdetails=0';
+    const resp = await fetch(url, {
+      headers: { 'Accept': 'application/json' }
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const arr = await resp.json();
+    if (!Array.isArray(arr) || arr.length === 0) return null;
+    const r = arr[0];
+    const lat = parseFloat(r.lat);
+    const lon = parseFloat(r.lon);
+    if (!isFinite(lat) || !isFinite(lon)) return null;
+    return { lat: lat, lon: lon, display: r.display_name || query };
+  }
+
+  async function submitGoto() {
+    const txt = gotoInput.value.trim();
+    if (!txt) return;
+    gotoError.classList.add('hidden');
+
+    if (!isTeleportAllowed()) {
+      gotoError.textContent = '🔒 Teleporte bloqueado. Feche este modal e destrave o cadeado antes.';
+      gotoError.classList.remove('hidden');
+      return;
+    }
+
+    // Primeiro tenta coordenadas
+    const coords = parseCoords(txt);
+    if (coords) {
+      Movement.teleport(coords.lat, coords.lon);
+      Map.map.setView([coords.lat, coords.lon], Map.map.getZoom(), { animate: true });
+      saveNow();
+      lockTeleportNow();
+      closeGoto();
+      return;
+    }
+
+    // Senao geocode
+    gotoStatus.textContent = '🔍 Buscando endereco...';
+    gotoStatus.classList.remove('hidden');
+    try {
+      const result = await geocodeNominatim(txt);
+      if (!result) {
+        gotoStatus.classList.add('hidden');
+        gotoError.textContent = 'Endereco nao encontrado. Tenta ser mais especifico.';
+        gotoError.classList.remove('hidden');
+        return;
+      }
+      Movement.teleport(result.lat, result.lon);
+      Map.map.setView([result.lat, result.lon], Map.map.getZoom(), { animate: true });
+      saveNow();
+      lockTeleportNow();
+      closeGoto();
+      console.log('[Goto] ' + result.display + ' -> ' + result.lat.toFixed(6) + ', ' + result.lon.toFixed(6));
+    } catch (err) {
+      gotoStatus.classList.add('hidden');
+      gotoError.textContent = 'Erro na busca: ' + err.message;
+      gotoError.classList.remove('hidden');
+    }
+  }
+
+  btnGoto.addEventListener('click', openGoto);
+  document.getElementById('modal-goto-cancel').addEventListener('click', closeGoto);
+  document.getElementById('modal-goto-go').addEventListener('click', submitGoto);
+  gotoInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') submitGoto();
+    if (e.key === 'Escape') closeGoto();
+  });
+  modalGoto.addEventListener('click', function (e) {
+    if (e.target === modalGoto) closeGoto();
+  });
+
+  function updatePauseUI() {
+    btnPause.classList.toggle('paused', isPaused);
+    btnPause.textContent = isPaused ? '▶ Continuar' : '⏸ Pausar';
+    statusIndicator.classList.toggle('paused', isPaused);
+    statusIndicator.textContent = isPaused ? 'PAUSADO' : 'ATIVO';
+  }
+
+  // --- Main loop (requestAnimationFrame ~60fps) ---
+  let lastTime = performance.now();
+  function tick(now) {
+    const dt = Math.min(0.1, (now - lastTime) / 1000);
+    lastTime = now;
+
+    // Prioridade de input: autopilot > joystick/teclado. Pausa zera tudo.
+    const currentPos = Movement.getRaw();
+    const autoInput = AutoPilot.computeInput(currentPos.lat, currentPos.lon);
+    const rawInput = autoInput || Input.getInput();
+    const humanityPaused = Humanity.isSimulatedPaused();
+    const input = (isPaused || humanityPaused)
+      ? { x: 0, y: 0, magnitude: 0, heading: rawInput.heading }
+      : rawInput;
+
+    Movement.update(dt, input);
+    const pos = Movement.getRaw();
+
+    Map.setPosition(pos.lat, pos.lon, pos.heading);
+
+    latEl.textContent = pos.lat.toFixed(6);
+    lonEl.textContent = pos.lon.toFixed(6);
+    headEl.textContent = pos.heading.toFixed(0) + '°';
+    updateSpeedometer(pos.speedKmh);
+
+    // Status visual: prioridade = PAUSADO manual > humanity pause > ATIVO
+    if (isPaused) {
+      // Ja setado pelo updatePauseUI
+    } else if (humanityPaused) {
+      const type = Humanity.currentPauseType();
+      const label = type === 'traffic' ? '🚦 SINAL' : '⏱ PAUSA';
+      if (statusIndicator.textContent !== label) {
+        statusIndicator.textContent = label;
+        statusIndicator.classList.add('paused');
+      }
+    } else {
+      if (statusIndicator.textContent !== 'ATIVO') {
+        statusIndicator.textContent = 'ATIVO';
+        statusIndicator.classList.remove('paused');
+      }
+    }
+
+
+    // Mapa NAO centraliza automaticamente - apenas quando o usuario clica em "Centralizar".
+    // (Antes v0.1.7.1 centralizava durante autopilot; removido a pedido.)
+
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  // --- Autosave: salva posicao a cada 5s + no fechamento ---
+  function saveNow() {
+    const pos = Movement.getRaw();
+    Persistence.save({
+      lat: pos.lat,
+      lon: pos.lon,
+      heading: pos.heading,
+      activePresetId: activePresetId,
+      maxSpeedKmh: parseFloat(speedSlider.value),
+      paused: isPaused,
+      humanityEnabled: Humanity.isEnabled()
+    });
+  }
+  setInterval(saveNow, Persistence.AUTOSAVE_MS);
+  window.addEventListener('beforeunload', saveNow);
+
+  // --- Publica posicao pro servidor HTTP a 10Hz (100ms) ---
+  setInterval(function () {
+    if (!window.FakeGPSBridge || !window.FakeGPSBridge.publishLocation) return;
+    const pos = Movement.getNoisy();
+    // Alpha: se alphaFromHeading ligado, bussola segue heading do GPS (CW->CCW conversion).
+    //        Senao, usa o valor manual do slider/drag.
+    const rawHeading = Movement.getRaw().heading;
+    const alpha = orientationState.alphaFromHeading
+      ? ((360 - rawHeading) % 360 + 360) % 360
+      : orientationState.alpha;
+    window.FakeGPSBridge.publishLocation({
+      lat: pos.lat,
+      lon: pos.lon,
+      heading: pos.heading,
+      speedMps: pos.speedMps,
+      accuracy: pos.accuracy,
+      orientation: {
+        alpha: alpha,
+        beta: orientationState.beta,
+        gamma: orientationState.gamma
+      }
+    });
+  }, 100);
+
+  console.log('%c[Fake GPS PC] v0.1.11.2 pronto',
+    'background:#1a73e8;color:#fff;padding:2px 6px;border-radius:3px');
+  console.log('Controles: joystick (mouse) ou WASD/setas | ⏸ pausar sem perder posicao');
+  console.log('Posicao auto-salva a cada 5s + ao fechar');
+})(window);
