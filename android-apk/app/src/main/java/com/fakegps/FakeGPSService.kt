@@ -21,7 +21,8 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowManager
-import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.core.app.NotificationCompat
 
 /**
@@ -57,6 +58,19 @@ class FakeGPSService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
 
     private val PROVIDER_NAME = LocationManager.GPS_PROVIDER
+    private var speedLabel: TextView? = null
+    private var presetWalk: TextView? = null
+    private var presetRun: TextView? = null
+    private var presetCar: TextView? = null
+
+    data class Preset(val name: String, val kmh: Float, val view: () -> TextView?)
+    private val presets by lazy {
+        listOf(
+            Preset("walk", 5f) { presetWalk },
+            Preset("run", 12f) { presetRun },
+            Preset("car", 50f) { presetCar }
+        )
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -187,8 +201,25 @@ class FakeGPSService : Service() {
 
             engine.update(dt, currentInput)
             publishMockLocation()
+            updateSpeedLabel()
 
             handler.postDelayed(this, UPDATE_INTERVAL_MS)
+        }
+    }
+
+    private fun updateSpeedLabel() {
+        speedLabel?.let { label ->
+            val kmh = engine.speedMps * 3.6f
+            label.text = String.format("%.1f km/h", kmh)
+            // Cor progressiva: verde < 60%, amarelo 60-90%, vermelho 90%+
+            val ratio = (kmh / engine.maxSpeedKmh).coerceIn(0f, 1.5f)
+            label.setTextColor(
+                when {
+                    ratio >= 0.9f -> 0xFFE53935.toInt()  // vermelho
+                    ratio >= 0.6f -> 0xFFFFD600.toInt()  // amarelo
+                    else -> 0xFF4CAF50.toInt()           // verde
+                }
+            )
         }
     }
 
@@ -200,9 +231,13 @@ class FakeGPSService : Service() {
     private fun showOverlay() {
         if (overlayRoot != null) return
 
-        val root = LayoutInflater.from(this).inflate(R.layout.overlay_joystick, null) as FrameLayout
+        val root = LayoutInflater.from(this).inflate(R.layout.overlay_joystick, null) as LinearLayout
         val joystick = root.findViewById<JoystickOverlayView>(R.id.joystick)
         val btnClose = root.findViewById<View>(R.id.btn_close)
+        speedLabel = root.findViewById(R.id.speed_label)
+        presetWalk = root.findViewById(R.id.preset_walk)
+        presetRun = root.findViewById(R.id.preset_run)
+        presetCar = root.findViewById(R.id.preset_car)
 
         joystick.onInputChange = { input ->
             currentInput = MovementEngine.Input(input.x, input.y, input.magnitude, input.heading)
@@ -210,6 +245,18 @@ class FakeGPSService : Service() {
         btnClose.setOnClickListener {
             stop()
             stopSelf()
+        }
+
+        // Carrega ultimo preset selecionado (SharedPreferences)
+        val prefs = getSharedPreferences("fakegps", Context.MODE_PRIVATE)
+        val savedPreset = prefs.getString("preset", "walk") ?: "walk"
+        applyPreset(savedPreset)
+
+        presets.forEach { p ->
+            p.view()?.setOnClickListener {
+                applyPreset(p.name)
+                prefs.edit().putString("preset", p.name).apply()
+            }
         }
 
         val overlayType = if (Build.VERSION.SDK_INT >= 26) {
@@ -231,9 +278,17 @@ class FakeGPSService : Service() {
             x = 40
             y = 100
         }
-        root.background = ColorDrawable(0x00000000)
         windowManager.addView(root, params)
         overlayRoot = root
+    }
+
+    private fun applyPreset(name: String) {
+        val preset = presets.find { it.name == name } ?: presets[0]
+        engine.maxSpeedKmh = preset.kmh
+        // Visual: destaca o botao ativo (azul), outros ficam cinza
+        presets.forEach { p ->
+            p.view()?.setBackgroundColor(if (p.name == name) 0xFF4285F4.toInt() else 0xFF333A44.toInt())
+        }
     }
 
     private fun hideOverlay() {
@@ -241,6 +296,10 @@ class FakeGPSService : Service() {
             try { windowManager.removeView(it) } catch (ignored: Exception) {}
         }
         overlayRoot = null
+        speedLabel = null
+        presetWalk = null
+        presetRun = null
+        presetCar = null
     }
 
     // --- Notification + WakeLock ---

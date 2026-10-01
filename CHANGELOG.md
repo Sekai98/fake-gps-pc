@@ -2,6 +2,29 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
+## [0.2.0-alpha2] - 2026-10-01 (Android APK)
+
+### Added
+- **3 presets de velocidade no overlay**: 🚶 Walk 5 km/h, 🏃 Run 12 km/h, 🚗 Car 50 km/h
+  - Botao ativo fica azul, inativos cinza
+  - Click muda `engine.maxSpeedKmh` em tempo real
+  - Preset selecionado persiste em SharedPreferences (`fakegps.preset`)
+- **Label de velocidade atual** abaixo do joystick: "N.N km/h" com cor progressiva
+  - Verde < 60% da max
+  - Amarelo 60-90%
+  - Vermelho >= 90%
+  - Atualiza a 10Hz (mesmo loop do mock location)
+
+### Technical
+- `overlay_joystick.xml`: FrameLayout -> LinearLayout vertical (3 secoes: presets, joystick+close, label)
+- `FakeGPSService`: `applyPreset(name)` + `updateSpeedLabel()` + lista `presets` com (nome, kmh, lazy view ref)
+- SharedPreferences `fakegps` guarda o preset selecionado
+
+### Files
+- EDIT `android-apk/app/src/main/res/layout/overlay_joystick.xml`
+- EDIT `android-apk/app/src/main/java/com/fakegps/FakeGPSService.kt`
+- EDIT `android-apk/app/build.gradle` (versionCode 2, versionName 0.2.0-alpha2)
+
 ## [0.2.0-alpha1] - 2026-10-01 (Android APK)
 
 ### Added - Novo projeto Android APK: joystick flutuante + mock location
