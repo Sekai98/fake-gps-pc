@@ -140,17 +140,9 @@
     const heading = computeHeading(currentLat, currentLon, next.lat, next.lon);
     const headingRad = heading * Math.PI / 180;
 
-    // Fator de curva: olha o proximo waypoint apos esse pra ver se vem curva
+    // Velocidade constante durante autopilot (removido reducao em curvas em v0.1.11.3).
+    // Oscilacao natural de +/-1 km/h continua ativa via movement.js config.variationKmh.
     let magnitude = 1;
-    const afterNext = state.waypoints[state.currentIdx + 1];
-    if (afterNext) {
-      const angle = turnAngleDeg(
-        { lat: currentLat, lon: currentLon },
-        next,
-        afterNext
-      );
-      magnitude *= curveSlowdownFactor(angle);
-    }
 
     // Fator de aproximacao do destino final: freia nos ultimos metros
     const isLast = state.currentIdx === state.waypoints.length - 1;
@@ -176,6 +168,21 @@
     };
   }
 
+  // Distancia restante em metros do ponto atual ate o destino final da rota.
+  // Soma: (atual -> waypoint corrente) + (segmentos restantes entre waypoints).
+  function getRemainingDistanceMeters(currentLat, currentLon) {
+    if (!isActive()) return 0;
+    const first = state.waypoints[state.currentIdx];
+    if (!first) return 0;
+    let total = distanceMeters(currentLat, currentLon, first.lat, first.lon);
+    for (let i = state.currentIdx; i < state.waypoints.length - 1; i++) {
+      const a = state.waypoints[i];
+      const b = state.waypoints[i + 1];
+      total += distanceMeters(a.lat, a.lon, b.lat, b.lon);
+    }
+    return total;
+  }
+
   global.FakeGPS = global.FakeGPS || {};
   global.FakeGPS.AutoPilot = {
     start: start,
@@ -183,6 +190,7 @@
     isActive: isActive,
     computeInput: computeInput,
     getProgress: getProgress,
+    getRemainingDistanceMeters: getRemainingDistanceMeters,
     setActiveKindProvider: setActiveKindProvider,
     WAYPOINT_REACHED_METERS: WAYPOINT_REACHED_METERS
   };

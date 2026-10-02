@@ -2,6 +2,79 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
+## [0.1.11.6] - 2026-10-01 (Electron)
+
+### Changed
+- **Sensibilidade do drag do celular 3D reduzida pra ficar mais suave**:
+  - Beta (dy drag): `0.3` → **`0.12`** (60% mais lento)
+  - Gamma (dx drag): `0.2` → **`0.08`** (60% mais lento)
+  - Alpha (Shift+drag): `0.3` → **`0.1`** (66% mais lento)
+- Permite ajuste mais fino com o mouse. Sliders continuam com step 1° (ajuste granular).
+
+### Files
+- EDIT `src/renderer/app.js` (3 valores de sensibilidade no handler de mousemove do drag)
+- EDIT bump versao em todos arquivos
+
+## [0.1.11.5] - 2026-10-01 (Electron)
+
+### Fixed - CRITICO: Extension bloqueada por Private Network Access
+- **Chromium v117+ bloqueia requests de https:// pra localhost** sem header de permissao especifica
+- Sintoma: `Access to fetch at 'http://127.0.0.1:3477/health' from origin 'https://gocollect.fun' has been blocked by CORS policy: Permission was denied for this request to access the loopback address space`
+- Resultado: extensao nao conseguia pegar coords do Electron, usava fallback estatico (Paulista)
+- **Fix**: `src/server.js` passa a enviar header `Access-Control-Allow-Private-Network: true` em todas as responses (inclusive preflight OPTIONS)
+- Tambem: `Access-Control-Request-Private-Network` adicionado aos headers permitidos
+- Por que funcionava antes: provavelmente perfil antigo ja tinha cache de permissao, perfil novo nao
+
+### Files
+- EDIT `src/server.js` (headers PNA + /health responde com nova versao)
+- EDIT bump versao em todos arquivos
+
+## [0.1.11.4] - 2026-10-01 (Electron)
+
+### Added
+- **ETA (tempo estimado) ate o destino da rota** no painel VELOCIMETRO, embaixo do "max N":
+  - Format: `⏱ --:--` quando autopilot inativo; `⏱ 2min 15s` ou `⏱ 1h 23min` quando ativo
+  - Calcula distancia restante (ponto atual → waypoint atual + segmentos restantes) ÷ velocidade max do preset × 3600
+  - Fica verde quando ativo (classe `.active`)
+  - Atualiza a 60Hz no tick loop
+
+### Technical
+- `autopilot.js`: nova funcao `getRemainingDistanceMeters(lat, lon)` exportada - soma distancia atual→proximo + segmentos restantes
+- `app.js`: `formatETA(seconds)` + `updateETA(lat, lon)` + chamada no tick loop
+- `index.html`: `#speedo-eta` dentro de `.speedometer-panel`
+- `styles.css`: `.speedo-eta` + `.speedo-eta.active`
+
+### Files
+- EDIT `src/renderer/autopilot.js` (getRemainingDistanceMeters + export)
+- EDIT `src/renderer/index.html` (speedo-eta element + versao)
+- EDIT `src/renderer/styles.css` (.speedo-eta styles)
+- EDIT `src/renderer/app.js` (speedoEta ref + formatETA + updateETA + call no tick)
+- EDIT bump versao em todos arquivos restantes
+
+## [0.1.11.3] - 2026-10-01 (Electron)
+
+### Removed
+- **Reducao de velocidade em curvas durante autopilot** (feature introduzida na v0.1.8.4):
+  - Antes: autopilot calculava angulo entre segmentos e reduzia magnitude pra 35-100% da velocidade max
+  - Agora: velocidade constante durante autopilot. Oscilacao natural de +/- 1 km/h continua ativa (movement.js config.variationKmh)
+- Campo "Freada em curva" removido do modal Config do Carro (⚙ do preset)
+- `curveSlowdownMin` removido do CarConfig schema
+
+### Kept
+- **Aproximacao ao destino final**: ultimos 15m ainda freiam gradualmente ate 25% da velocidade max (pra nao parar brusco)
+- **Oscilacao natural +/-1 km/h**: ja existia em `movement.js` (variationKmh=1.0, variationIntervalMs=1000, variationLerpRate=2.0). Independente de humanidade/autopilot.
+
+### Technical
+- `autopilot.js`: `curveSlowdownFactor()` e `turnAngleDeg()` continuam existindo (dead code preservado por simplicidade), mas `computeInput` nao chama mais - `magnitude = 1` fixo
+- `app.js`: `carFields` sem `curveSlowdownMin`; `fillCarForm` e `saveCarConfig` idem
+- `index.html`: removida a row do input `car-curveSlowdownMin`
+
+### Files
+- EDIT `src/renderer/autopilot.js` (remove chamada de `curveSlowdownFactor` em computeInput)
+- EDIT `src/renderer/index.html` (remove row + bump versao)
+- EDIT `src/renderer/app.js` (sem `curveSlowdownMin` em carFields + bump versao log)
+- EDIT bump versao em todos arquivos restantes
+
 ## [0.2.0-alpha2] - 2026-10-01 (Android APK)
 
 ### Added

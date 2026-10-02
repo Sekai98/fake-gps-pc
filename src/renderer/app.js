@@ -19,6 +19,7 @@
   const headEl = document.getElementById('heading');
   const speedoValue = document.getElementById('speedo-value');
   const speedoMax = document.getElementById('speedo-max');
+  const speedoEta = document.getElementById('speedo-eta');
   const speedSlider = document.getElementById('speed-slider');
   const speedValue = document.getElementById('speed-value');
   const btnCenter = document.getElementById('btn-center');
@@ -435,8 +436,8 @@
     const dx = e.clientX - oriDrag.x0;
     const dy = e.clientY - oriDrag.y0;
     if (e.shiftKey) {
-      // Shift: rotate alpha (sensibilidade reduzida)
-      let a = (oriDrag.a0 + dx * 0.3) % 360;
+      // Shift: rotate alpha (sensibilidade suave)
+      let a = (oriDrag.a0 + dx * 0.1) % 360;
       if (a < 0) a += 360;
       orientationState.alpha = a;
       if (orientationState.alphaFromHeading) {
@@ -445,9 +446,9 @@
       }
     } else {
       // Normal: dy invertido -> beta (arrastar pra cima = topo pra frente),
-      //         dx -> gamma. Sensibilidade reduzida.
-      orientationState.beta = Math.max(-180, Math.min(180, oriDrag.b0 - dy * 0.3));
-      orientationState.gamma = Math.max(-90, Math.min(90, oriDrag.g0 + dx * 0.2));
+      //         dx -> gamma. Sensibilidade suave pra ajuste fino.
+      orientationState.beta = Math.max(-180, Math.min(180, oriDrag.b0 - dy * 0.12));
+      orientationState.gamma = Math.max(-90, Math.min(90, oriDrag.g0 + dx * 0.08));
     }
     applyOrientationToUI();
   });
@@ -471,6 +472,35 @@
     speedoMax.textContent = 'max ' + max.toFixed(0);
   }
   updateSpeedometer(0);
+
+  // Formato ETA: "~45s", "3min 12s", "1h 23min"
+  function formatETA(seconds) {
+    if (!isFinite(seconds) || seconds <= 0) return '--:--';
+    if (seconds < 60) return '~' + Math.round(seconds) + 's';
+    const totalSec = Math.round(seconds);
+    if (totalSec < 3600) {
+      const min = Math.floor(totalSec / 60);
+      const sec = totalSec % 60;
+      return min + 'min ' + (sec < 10 ? '0' + sec : sec) + 's';
+    }
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    return h + 'h ' + (m < 10 ? '0' + m : m) + 'min';
+  }
+
+  // Atualiza ETA baseado na distancia restante do autopilot + velocidade max do preset
+  function updateETA(currentLat, currentLon) {
+    if (!AutoPilot.isActive()) {
+      speedoEta.textContent = '⏱ --:--';
+      speedoEta.classList.remove('active');
+      return;
+    }
+    const remainingMeters = AutoPilot.getRemainingDistanceMeters(currentLat, currentLon);
+    const maxKmh = parseFloat(speedSlider.value) || 1;
+    const etaSeconds = (remainingMeters / 1000) / maxKmh * 3600;
+    speedoEta.textContent = '⏱ ' + formatETA(etaSeconds);
+    speedoEta.classList.add('active');
+  }
 
   // --- Humanidade: provider ---
   Humanity.setIsMovingProvider(function () {
@@ -584,7 +614,6 @@
   const modalCarError = document.getElementById('modal-car-error');
   const carFields = {
     accelSeconds: document.getElementById('car-accelSeconds'),
-    curveSlowdownMin: document.getElementById('car-curveSlowdownMin'),
     approachMeters: document.getElementById('car-approachMeters'),
     trafficStopChance: document.getElementById('car-trafficStopChance'),
     trafficStopMinMs: document.getElementById('car-trafficStopMin'),
@@ -594,7 +623,6 @@
   function fillCarForm() {
     const c = CarConfig.getConfig();
     carFields.accelSeconds.value = c.accelSeconds.toFixed(1);
-    carFields.curveSlowdownMin.value = c.curveSlowdownMin.toFixed(2);
     carFields.approachMeters.value = c.approachMeters.toFixed(0);
     carFields.trafficStopChance.value = (c.trafficStopChance * 100).toFixed(0);
     carFields.trafficStopMinMs.value = (c.trafficStopMinMs / 1000).toFixed(0);
@@ -609,7 +637,6 @@
   function saveCarConfig() {
     const patch = {
       accelSeconds: parseFloat(carFields.accelSeconds.value),
-      curveSlowdownMin: parseFloat(carFields.curveSlowdownMin.value),
       approachMeters: parseFloat(carFields.approachMeters.value),
       trafficStopChance: parseFloat(carFields.trafficStopChance.value) / 100,
       trafficStopMinMs: parseFloat(carFields.trafficStopMinMs.value) * 1000,
@@ -617,7 +644,7 @@
     };
     const ok = CarConfig.setConfig(patch);
     if (!ok) {
-      modalCarError.textContent = 'Valores invalidos. Verifique: aceleracao 0.1-30, curve 0.05-1, chance 0-100%, min <= max.';
+      modalCarError.textContent = 'Valores invalidos. Verifique: aceleracao 0.1-30, chance 0-100%, min <= max.';
       modalCarError.classList.remove('hidden');
       return;
     }
@@ -1174,6 +1201,7 @@
     lonEl.textContent = pos.lon.toFixed(6);
     headEl.textContent = pos.heading.toFixed(0) + '°';
     updateSpeedometer(pos.speedKmh);
+    updateETA(pos.lat, pos.lon);
 
     // Status visual: prioridade = PAUSADO manual > humanity pause > ATIVO
     if (isPaused) {
@@ -1240,7 +1268,7 @@
     });
   }, 100);
 
-  console.log('%c[Fake GPS PC] v0.1.11.2 pronto',
+  console.log('%c[Fake GPS PC] v0.1.11.6 pronto',
     'background:#1a73e8;color:#fff;padding:2px 6px;border-radius:3px');
   console.log('Controles: joystick (mouse) ou WASD/setas | ⏸ pausar sem perder posicao');
   console.log('Posicao auto-salva a cada 5s + ao fechar');

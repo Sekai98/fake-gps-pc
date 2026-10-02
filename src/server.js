@@ -75,7 +75,10 @@ function readJsonBody(req) {
 function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Access-Control-Request-Private-Network');
+  // Private Network Access (PNA): Chromium bloqueia requests de https:// pra localhost
+  // sem este header desde ~v117. Setar sempre, inclusive em preflight OPTIONS.
+  res.setHeader('Access-Control-Allow-Private-Network', 'true');
   res.setHeader('Cache-Control', 'no-store');
 
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
@@ -87,7 +90,7 @@ function handler(req, res) {
   }
   if (req.method === 'GET' && req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, service: 'fake-gps-pc', version: '0.1.11.2' }));
+    res.end(JSON.stringify({ ok: true, service: 'fake-gps-pc', version: '0.1.11.6' }));
     return;
   }
   if (req.method === 'POST' && req.url === '/crates') {

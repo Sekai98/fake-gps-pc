@@ -12,7 +12,7 @@
     <div class="title">
       <span class="dot"></span>
       Fake GPS PC
-      <span class="version">v0.1.11.2</span>
+      <span class="version">v0.1.11.6</span>
     </div>
     <div class="status">
       <span class="status-label">Status:</span>
@@ -120,12 +120,6 @@
           <label>Tempo de 0 ate velocidade max (seg)</label>
           <div class="range-inputs">
             <input type="number" id="car-accelSeconds" min="0.5" max="30" step="0.1">
-          </div>
-        </div>
-        <div class="settings-row">
-          <label>Freada em curva (minimo, 0 a 1)</label>
-          <div class="range-inputs">
-            <input type="number" id="car-curveSlowdownMin" min="0.05" max="1" step="0.05">
           </div>
         </div>
         <div class="settings-row">
@@ -284,6 +278,7 @@
         <div class="speedo-unit">km/h</div>
       </div>
       <div class="speedo-max" id="speedo-max">max 5</div>
+      <div class="speedo-eta" id="speedo-eta" title="Tempo estimado ate o destino da rota">⏱ --:--</div>
     </div>
 
     <div class="panel controls-panel">
