@@ -342,7 +342,8 @@ class MainActivity : AppCompatActivity() {
             }
             for (i in 0 until arr.length()) {
                 val o = arr.optJSONObject(i) ?: continue
-                val id = o.optString("id", "").ifEmpty { continue }
+                val id = o.optString("id", "")
+                if (id.isEmpty()) continue
                 val name = o.optString("name", id)
                 out.add(id to name)
             }
