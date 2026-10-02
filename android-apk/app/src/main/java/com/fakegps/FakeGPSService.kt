@@ -47,6 +47,7 @@ class FakeGPSService : Service() {
         const val ACTION_TELEPORT = "com.fakegps.ACTION_TELEPORT"
         const val ACTION_SHOW_OVERLAY = "com.fakegps.ACTION_SHOW_OVERLAY"
         const val ACTION_START_SLAVE = "com.fakegps.ACTION_START_SLAVE"
+        const val ACTION_STOP_SLAVE = "com.fakegps.ACTION_STOP_SLAVE"
 
         const val EXTRA_WAYPOINTS = "waypoints"
         const val EXTRA_LAT = "lat"
@@ -56,6 +57,9 @@ class FakeGPSService : Service() {
 
         const val KEY_SLAVE_URL = "slave_url"
         const val KEY_SLAVE_TAB = "slave_tab"
+        const val KEY_SLAVE_RUNNING = "slave_running"
+        const val KEY_SLAVE_LAST_SUCCESS_MS = "slave_last_success_ms"
+        const val KEY_SLAVE_LAST_ERROR = "slave_last_error"
         const val SLAVE_POLL_INTERVAL_MS = 100L  // 10Hz - igual Electron publica
 
         const val NOTIF_CHANNEL = "fake_gps_channel"
@@ -135,6 +139,7 @@ class FakeGPSService : Service() {
                 intent.getStringExtra(EXTRA_SLAVE_URL) ?: "",
                 intent.getStringExtra(EXTRA_SLAVE_TAB) ?: ""
             )
+            ACTION_STOP_SLAVE -> handleStopSlave()
             ACTION_STOP -> {
                 stop()
                 stopSelf()
@@ -156,6 +161,7 @@ class FakeGPSService : Service() {
         slaveTab = tab.trim()
         slaveLastSuccessMs = 0
         slaveLastError = null
+        persistSlaveState()
         if (!running) {
             start()
         } else {
@@ -163,7 +169,51 @@ class FakeGPSService : Service() {
             autopilot.stop()
             currentInput = MovementEngine.Input(0f, 0f, 0f, 0f)
             handler.post(slavePollLoop)
+            // Reaplica estado visual do overlay (dim)
+            overlayRoot?.let { reapplyOverlaySlaveStyle() }
             refreshNotification()
+        }
+    }
+
+    private fun handleStopSlave() {
+        if (!slaveMode) return
+        slaveMode = false
+        handler.removeCallbacks(slavePollLoop)
+        currentInput = MovementEngine.Input(0f, 0f, 0f, 0f)
+        persistSlaveState()
+        // Restaura overlay (joystick + presets voltam)
+        overlayRoot?.let { reapplyOverlaySlaveStyle() }
+        refreshNotification()
+    }
+
+    private fun persistSlaveState() {
+        val editor = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_SLAVE_RUNNING, slaveMode)
+        if (slaveMode) {
+            editor.putLong(KEY_SLAVE_LAST_SUCCESS_MS, slaveLastSuccessMs)
+            editor.putString(KEY_SLAVE_LAST_ERROR, slaveLastError)
+        } else {
+            editor.remove(KEY_SLAVE_LAST_SUCCESS_MS)
+            editor.remove(KEY_SLAVE_LAST_ERROR)
+        }
+        editor.apply()
+    }
+
+    /**
+     * Reaplica alpha/listener do joystick e presets baseado em slaveMode atual.
+     * Usado ao entrar/sair do modo slave sem recriar o overlay.
+     */
+    private fun reapplyOverlaySlaveStyle() {
+        val root = overlayRoot ?: return
+        val joystick = root.findViewById<JoystickOverlayView>(R.id.joystick) ?: return
+        if (slaveMode) {
+            joystick.alpha = 0.3f
+            joystick.setOnTouchListener { _, _ -> true }
+            presets.forEach { p -> p.view()?.alpha = 0.4f }
+        } else {
+            joystick.alpha = 1.0f
+            joystick.setOnTouchListener(null)
+            presets.forEach { p -> p.view()?.alpha = 1.0f }
         }
     }
 
@@ -223,6 +273,7 @@ class FakeGPSService : Service() {
 
         handler.removeCallbacksAndMessages(null)
         persistPosition()
+        persistSlaveState()
         hideOverlay()
         teardownMockProvider()
         releaseWakeLock()
@@ -414,8 +465,10 @@ class FakeGPSService : Service() {
             engine.speedMps = speedMps
             slaveLastSuccessMs = SystemClock.elapsedRealtime()
             slaveLastError = null
+            persistSlaveState()
         } catch (e: Exception) {
             slaveLastError = e.message ?: "erro desconhecido"
+            persistSlaveState()
         }
     }
 

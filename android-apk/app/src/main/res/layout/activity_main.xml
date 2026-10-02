@@ -164,17 +164,21 @@
             android:background="#1a2029"
             android:padding="10dp"/>
 
-        <EditText
-            android:id="@+id/input_slave_tab"
+        <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Tab (opcional, ex: tab-1)"
-            android:inputType="text"
-            android:textColor="#e8eaed"
-            android:textColorHint="#5f6368"
+            android:text="Tab (opcional - preenchida apos Testar)"
+            android:textColor="#9aa0a6"
+            android:textSize="11sp"
+            android:paddingTop="8dp"
+            android:paddingBottom="2dp"/>
+
+        <Spinner
+            android:id="@+id/spinner_slave_tab"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             android:background="#1a2029"
-            android:padding="10dp"
-            android:layout_marginTop="6dp"/>
+            android:padding="10dp"/>
 
         <TextView
             android:id="@+id/slave_status"
@@ -185,6 +189,18 @@
             android:textSize="12sp"
             android:paddingTop="6dp"
             android:paddingBottom="6dp"/>
+
+        <TextView
+            android:id="@+id/slave_status_label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="⚪ Desconectado"
+            android:textColor="#9aa0a6"
+            android:textSize="13sp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:background="#1a2029"
+            android:padding="10dp"/>
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -211,6 +227,16 @@
                 android:textAllCaps="false"
                 android:backgroundTint="#f9ab00"/>
         </LinearLayout>
+
+        <Button
+            android:id="@+id/btn_slave_stop"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="⏹  Parar modo slave"
+            android:textAllCaps="false"
+            android:backgroundTint="#e53935"
+            android:layout_marginTop="6dp"
+            android:visibility="gone"/>
 
         <TextView
             android:layout_width="match_parent"

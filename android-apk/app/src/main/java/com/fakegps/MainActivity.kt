@@ -9,14 +9,20 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
+import android.view.View
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
+import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import org.json.JSONArray
+import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
@@ -42,16 +48,26 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnMap: Button
 
     private lateinit var inputSlaveUrl: EditText
-    private lateinit var inputSlaveTab: EditText
+    private lateinit var spinnerSlaveTab: Spinner
     private lateinit var slaveStatus: TextView
+    private lateinit var slaveStatusLabel: TextView
     private lateinit var btnSlaveTest: Button
     private lateinit var btnSlaveStart: Button
+    private lateinit var btnSlaveStop: Button
 
     private val PERM_REQUEST_LOCATION = 1001
     private val PERM_REQUEST_NOTIF = 1002
 
     private val executor = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
+
+    private data class TabEntry(val id: String, val label: String) {
+        override fun toString(): String = label
+    }
+    private val tabEntries = ArrayList<TabEntry>().apply {
+        add(TabEntry("", "(automático - usa aba default do server)"))
+    }
+    private lateinit var tabAdapter: ArrayAdapter<TabEntry>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -69,15 +85,27 @@ class MainActivity : AppCompatActivity() {
         btnMap = findViewById(R.id.btn_map)
 
         inputSlaveUrl = findViewById(R.id.input_slave_url)
-        inputSlaveTab = findViewById(R.id.input_slave_tab)
+        spinnerSlaveTab = findViewById(R.id.spinner_slave_tab)
         slaveStatus = findViewById(R.id.slave_status)
+        slaveStatusLabel = findViewById(R.id.slave_status_label)
         btnSlaveTest = findViewById(R.id.btn_slave_test)
         btnSlaveStart = findViewById(R.id.btn_slave_start)
+        btnSlaveStop = findViewById(R.id.btn_slave_stop)
+
+        tabAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, tabEntries)
+        tabAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        spinnerSlaveTab.adapter = tabAdapter
 
         // Carrega ultimo URL/tab usado
         val prefs = getSharedPreferences(FakeGPSService.PREFS_NAME, Context.MODE_PRIVATE)
         inputSlaveUrl.setText(prefs.getString(FakeGPSService.KEY_SLAVE_URL, "") ?: "")
-        inputSlaveTab.setText(prefs.getString(FakeGPSService.KEY_SLAVE_TAB, "") ?: "")
+        val savedTab = prefs.getString(FakeGPSService.KEY_SLAVE_TAB, "") ?: ""
+        if (savedTab.isNotEmpty()) {
+            // Pre-popula spinner com a tab salva (mesmo sem ter testado ainda)
+            tabEntries.add(TabEntry(savedTab, "$savedTab (último usado)"))
+            tabAdapter.notifyDataSetChanged()
+            spinnerSlaveTab.setSelection(tabEntries.size - 1)
+        }
 
         btnOverlay.setOnClickListener { requestOverlayPermission() }
         btnLocation.setOnClickListener { requestLocationPermission() }
@@ -88,17 +116,74 @@ class MainActivity : AppCompatActivity() {
         btnMap.setOnClickListener { startActivity(Intent(this, MapActivity::class.java)) }
         btnSlaveTest.setOnClickListener { testSlaveConnection() }
         btnSlaveStart.setOnClickListener { startSlave() }
+        btnSlaveStop.setOnClickListener { stopSlave() }
     }
 
     override fun onResume() {
         super.onResume()
         updateStatus()
+        main.post(statusPollRunnable)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        main.removeCallbacks(statusPollRunnable)
     }
 
     override fun onDestroy() {
         executor.shutdownNow()
         super.onDestroy()
     }
+
+    // --- Status polling: le slave_running + timestamps das prefs e atualiza label ---
+    private val statusPollRunnable = object : Runnable {
+        override fun run() {
+            refreshSlaveStatusLabel()
+            main.postDelayed(this, 2000)
+        }
+    }
+
+    private fun refreshSlaveStatusLabel() {
+        val prefs = getSharedPreferences(FakeGPSService.PREFS_NAME, Context.MODE_PRIVATE)
+        val running = prefs.getBoolean(FakeGPSService.KEY_SLAVE_RUNNING, false)
+        val lastSuccess = prefs.getLong(FakeGPSService.KEY_SLAVE_LAST_SUCCESS_MS, 0)
+        val lastError = prefs.getString(FakeGPSService.KEY_SLAVE_LAST_ERROR, null)
+        val url = prefs.getString(FakeGPSService.KEY_SLAVE_URL, "") ?: ""
+        val tab = prefs.getString(FakeGPSService.KEY_SLAVE_TAB, "") ?: ""
+
+        if (!running) {
+            slaveStatusLabel.text = "⚪ Desconectado"
+            slaveStatusLabel.setTextColor(0xFF9AA0A6.toInt())
+            btnSlaveStop.visibility = View.GONE
+            btnSlaveStart.isEnabled = allPermissionsGranted()
+            return
+        }
+
+        btnSlaveStop.visibility = View.VISIBLE
+        btnSlaveStart.isEnabled = false  // Ja rodando
+
+        val sinceOkMs = if (lastSuccess > 0) SystemClock.elapsedRealtime() - lastSuccess else -1
+        val tabSuffix = if (tab.isNotEmpty()) " ($tab)" else ""
+        when {
+            sinceOkMs in 0..3000 -> {
+                slaveStatusLabel.text = "🟢 Conectado a $url$tabSuffix"
+                slaveStatusLabel.setTextColor(0xFF4CAF50.toInt())
+            }
+            sinceOkMs > 3000 -> {
+                val secs = sinceOkMs / 1000
+                slaveStatusLabel.text = "🔴 Sem resposta há ${secs}s - $url$tabSuffix"
+                slaveStatusLabel.setTextColor(0xFFE53935.toInt())
+            }
+            else -> {
+                val err = lastError ?: "aguardando primeira resposta"
+                slaveStatusLabel.text = "🟡 Tentando conectar: $err"
+                slaveStatusLabel.setTextColor(0xFFF9AB00.toInt())
+            }
+        }
+    }
+
+    private fun allPermissionsGranted(): Boolean =
+        hasOverlayPermission() && hasLocationPermission() && hasNotifPermission()
 
     private fun hasLocationPermission(): Boolean =
         ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
@@ -128,7 +213,7 @@ class MainActivity : AppCompatActivity() {
 
         val allPerms = overlay && location && notif
         btnStart.isEnabled = allPerms
-        btnSlaveStart.isEnabled = allPerms
+        // btnSlaveStart.isEnabled e definido pelo refreshSlaveStatusLabel()
     }
 
     private fun requestOverlayPermission() {
@@ -205,22 +290,21 @@ class MainActivity : AppCompatActivity() {
         slaveStatus.setTextColor(0xFF9AA0A6.toInt())
         executor.execute {
             try {
-                val conn = (URL("$url/health").openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 3000
-                    readTimeout = 3000
-                    requestMethod = "GET"
-                }
-                val code = conn.responseCode
-                val body = if (code == 200) conn.inputStream.bufferedReader().readText() else ""
-                conn.disconnect()
-                main.post {
-                    if (code == 200) {
-                        slaveStatus.text = "✓ Conectou (${body.take(80)})"
-                        slaveStatus.setTextColor(0xFF4CAF50.toInt())
-                    } else {
-                        slaveStatus.text = "✗ HTTP $code"
-                        slaveStatus.setTextColor(0xFFE53935.toInt())
+                val healthBody = httpGet("$url/health")
+                var tabsSummary = ""
+                try {
+                    val tabsBody = httpGet("$url/tabs")
+                    val tabs = parseTabs(tabsBody)
+                    main.post {
+                        updateTabsSpinner(tabs)
                     }
+                    tabsSummary = " / ${tabs.size} tab(s)"
+                } catch (ignored: Exception) {
+                    // /tabs opcional - server pode nao ter esse endpoint
+                }
+                main.post {
+                    slaveStatus.text = "✓ Conectou (${healthBody.take(60)})$tabsSummary"
+                    slaveStatus.setTextColor(0xFF4CAF50.toInt())
                 }
             } catch (e: Exception) {
                 main.post {
@@ -231,14 +315,61 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun httpGet(urlStr: String): String {
+        val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
+            connectTimeout = 3000
+            readTimeout = 3000
+            requestMethod = "GET"
+        }
+        try {
+            val code = conn.responseCode
+            if (code != 200) throw RuntimeException("HTTP $code")
+            return conn.inputStream.bufferedReader().use { it.readText() }
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    private fun parseTabs(body: String): List<Pair<String, String>> {
+        // Formato esperado: array de { id, name } (ou objeto com .tabs)
+        val out = ArrayList<Pair<String, String>>()
+        try {
+            val arr: JSONArray = try {
+                JSONArray(body)
+            } catch (e: Exception) {
+                val obj = JSONObject(body)
+                obj.optJSONArray("tabs") ?: JSONArray()
+            }
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val id = o.optString("id", "").ifEmpty { continue }
+                val name = o.optString("name", id)
+                out.add(id to name)
+            }
+        } catch (ignored: Exception) {}
+        return out
+    }
+
+    private fun updateTabsSpinner(tabs: List<Pair<String, String>>) {
+        val currentSelection = (spinnerSlaveTab.selectedItem as? TabEntry)?.id ?: ""
+        tabEntries.clear()
+        tabEntries.add(TabEntry("", "(automático - usa aba default do server)"))
+        tabs.forEach { (id, name) ->
+            tabEntries.add(TabEntry(id, "$id — $name"))
+        }
+        tabAdapter.notifyDataSetChanged()
+        // Tenta restaurar selecao anterior
+        val idx = tabEntries.indexOfFirst { it.id == currentSelection }
+        if (idx >= 0) spinnerSlaveTab.setSelection(idx)
+    }
+
     private fun startSlave() {
         val url = normalizeUrl(inputSlaveUrl.text.toString())
         if (url == null) {
             Toast.makeText(this, "Preencha a URL do Electron", Toast.LENGTH_SHORT).show()
             return
         }
-        val tab = inputSlaveTab.text.toString().trim()
-        // Salva nas prefs
+        val tab = (spinnerSlaveTab.selectedItem as? TabEntry)?.id ?: ""
         getSharedPreferences(FakeGPSService.PREFS_NAME, Context.MODE_PRIVATE).edit()
             .putString(FakeGPSService.KEY_SLAVE_URL, url)
             .putString(FakeGPSService.KEY_SLAVE_TAB, tab)
@@ -254,6 +385,13 @@ class MainActivity : AppCompatActivity() {
             startService(intent)
         }
         Toast.makeText(this, "Modo slave iniciado - PC controla", Toast.LENGTH_LONG).show()
+    }
+
+    private fun stopSlave() {
+        val intent = Intent(this, FakeGPSService::class.java)
+            .setAction(FakeGPSService.ACTION_STOP_SLAVE)
+        startService(intent)
+        Toast.makeText(this, "Modo slave parado - joystick local volta a funcionar", Toast.LENGTH_SHORT).show()
     }
 
     override fun onRequestPermissionsResult(

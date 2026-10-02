@@ -2,6 +2,26 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
+## [0.2.0-alpha7] - 2026-10-02 (Android APK) - Dropdown de tabs + parar slave + status ao vivo
+
+### Added - UX do modo slave
+- **Dropdown de tabs**: campo "Tab" virou `Spinner` que puxa `GET /tabs` do server ao clicar **Testar**. Primeira opção é "(automático)" (tab vazia = usa default do server). Demais são `id — nome` das abas reais do Electron.
+- **Status label persistente** no card SLAVE: mostra `⚪ Desconectado` / `🟡 Tentando conectar: motivo` / `🟢 Conectado a http://IP:PORT (tab-X)` / `🔴 Sem resposta há Ns`. Atualiza sozinho a cada 2s via polling de SharedPreferences.
+- **Botão "Parar modo slave"** separado do "Parar": só desliga o `slavePollLoop` do service sem matar o foreground service. Permite voltar pro modo standalone (joystick, mapa, autopilot) sem reabrir o app.
+- Service persiste `KEY_SLAVE_RUNNING`, `KEY_SLAVE_LAST_SUCCESS_MS`, `KEY_SLAVE_LAST_ERROR` nas SharedPreferences a cada poll.
+- Nova action `FakeGPSService.ACTION_STOP_SLAVE`.
+- Nova função `reapplyOverlaySlaveStyle` que atualiza alpha/listener do joystick ao entrar/sair do modo slave sem recriar o overlay.
+
+### Added - Persistência
+- Reconexão automática: o `slavePollLoop` continua tentando a cada 100ms mesmo com rede off / Electron fechado. Quando volta, próximo tick reconecta. Status label e notif refletem o estado em tempo real.
+- Última tab usada é pre-selecionada no spinner ao reabrir o app (como "último usado" se o server ainda não respondeu `/tabs`).
+
+### Files
+- EDIT `android-apk/app/src/main/res/layout/activity_main.xml` (Spinner tab + label status + botão Parar slave)
+- EDIT `android-apk/app/src/main/java/com/fakegps/MainActivity.kt` (TabEntry, Spinner adapter, status polling, parseTabs, stopSlave, refreshSlaveStatusLabel)
+- EDIT `android-apk/app/src/main/java/com/fakegps/FakeGPSService.kt` (ACTION_STOP_SLAVE, KEY_SLAVE_* novas, persistSlaveState, reapplyOverlaySlaveStyle, handleStopSlave)
+- EDIT `android-apk/app/build.gradle` (versionCode 8, versionName 0.2.0-alpha7)
+
 ## [0.2.0-alpha6.1] - 2026-10-02 (Android APK) - Hotfix: permitir HTTP cleartext (modo slave)
 
 ### Fixed

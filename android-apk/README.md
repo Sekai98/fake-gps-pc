@@ -96,7 +96,9 @@ Av. Paulista, São Paulo (-23.561684, -46.655981). Mesmo default do app Electron
 - v0.2.0-alpha3: persistência de posição + joystick arrastável
 - v0.2.0-alpha4: mapa com TP e autopilot, notif dinâmica com km restantes, toggle drag no overlay
 - v0.2.0-alpha5: fixes - joystick não trava mais, marker do mapa segue personagem, precisão GPS maior
-- **v0.2.0-alpha6** (agora): modo slave - APK controlado pelo Fake GPS Electron do PC via WiFi
+- v0.2.0-alpha6: modo slave - APK controlado pelo Fake GPS Electron do PC via WiFi
+- v0.2.0-alpha6.1: hotfix cleartext HTTP (modo slave agora funciona em Android 9+)
+- **v0.2.0-alpha7** (agora): dropdown de tabs no slave, status ao vivo, botão parar slave sem matar o service
 - v0.2.0: release com orientação 3D opcional
 
 ## Modo slave (alpha6)
