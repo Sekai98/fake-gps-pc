@@ -90,7 +90,7 @@ function handler(req, res) {
   }
   if (req.method === 'GET' && req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, service: 'fake-gps-pc', version: '0.1.11.6' }));
+    res.end(JSON.stringify({ ok: true, service: 'fake-gps-pc', version: '0.1.12' }));
     return;
   }
   if (req.method === 'POST' && req.url === '/crates') {

@@ -1,13 +1,7 @@
-// Modulo de estado dos crates detectados pela extension.
-// Formato de entrada (vindo do gocollect.fun): { id, lat, lng, expiresAt, openedByMe }
-// Normalizamos pra { id, lat, lon, expiresAt, openedByMe }.
+// Estado dos crates detectados pela extension. Factory + instance default.
 
 (function (global) {
   'use strict';
-
-  // Mapa id -> crate normalizado
-  const crates = new Map();
-  let listeners = [];
 
   function normalize(raw) {
     if (!raw || typeof raw.id !== 'string') return null;
@@ -23,38 +17,7 @@
     };
   }
 
-  // Atualiza o estado com o batch mais recente (substitui tudo).
-  // Opcao mais robusta: merge por id, mas o endpoint do site devolve o estado completo da regiao,
-  // entao substituir e correto (crates fora da regiao somem naturalmente).
-  function update(rawList) {
-    if (!Array.isArray(rawList)) return;
-    crates.clear();
-    rawList.forEach(function (r) {
-      const n = normalize(r);
-      if (n) crates.set(n.id, n);
-    });
-    emit();
-  }
-
-  function all() {
-    return Array.from(crates.values());
-  }
-
-  // Retorna somente crates nao abertos e nao expirados
-  function available() {
-    const now = Date.now();
-    return all().filter(function (c) {
-      if (c.openedByMe) return false;
-      if (c.expiresAt && c.expiresAt < now) return false;
-      return true;
-    });
-  }
-
-  function byId(id) {
-    return crates.get(id) || null;
-  }
-
-  // Haversine em metros
+  // Haversine em metros - pura, fica fora
   function distanceMeters(lat1, lon1, lat2, lon2) {
     const R = 6371000;
     const toRad = Math.PI / 180;
@@ -65,40 +28,79 @@
     return 2 * R * Math.asin(Math.sqrt(a));
   }
 
-  function nearest(fromLat, fromLon) {
-    const avail = available();
-    if (avail.length === 0) return null;
-    let best = null;
-    let bestDist = Infinity;
-    for (const c of avail) {
-      const d = distanceMeters(fromLat, fromLon, c.lat, c.lon);
-      if (d < bestDist) { bestDist = d; best = c; }
+  function createCrates() {
+    const crates = new Map();
+    let listeners = [];
+
+    function update(rawList) {
+      if (!Array.isArray(rawList)) return;
+      crates.clear();
+      rawList.forEach(function (r) {
+        const n = normalize(r);
+        if (n) crates.set(n.id, n);
+      });
+      emit();
     }
-    return best ? { crate: best, distanceMeters: bestDist } : null;
-  }
 
-  function onUpdate(cb) {
-    if (typeof cb === 'function') listeners.push(cb);
-  }
+    function all() {
+      return Array.from(crates.values());
+    }
 
-  function emit() {
-    const snapshot = all();
-    listeners.forEach(function (cb) {
-      try { cb(snapshot); } catch (e) { /* silencio */ }
-    });
-  }
+    function available() {
+      const now = Date.now();
+      return all().filter(function (c) {
+        if (c.openedByMe) return false;
+        if (c.expiresAt && c.expiresAt < now) return false;
+        return true;
+      });
+    }
 
-  function count() { return crates.size; }
+    function byId(id) { return crates.get(id) || null; }
+
+    function nearest(fromLat, fromLon) {
+      const avail = available();
+      if (avail.length === 0) return null;
+      let best = null;
+      let bestDist = Infinity;
+      for (const c of avail) {
+        const d = distanceMeters(fromLat, fromLon, c.lat, c.lon);
+        if (d < bestDist) { bestDist = d; best = c; }
+      }
+      return best ? { crate: best, distanceMeters: bestDist } : null;
+    }
+
+    function onUpdate(cb) {
+      if (typeof cb === 'function') listeners.push(cb);
+    }
+
+    function emit() {
+      const snapshot = all();
+      listeners.forEach(function (cb) {
+        try { cb(snapshot); } catch (e) {}
+      });
+    }
+
+    function count() { return crates.size; }
+
+    function destroy() {
+      crates.clear();
+      listeners.length = 0;
+    }
+
+    return {
+      update: update,
+      all: all,
+      available: available,
+      nearest: nearest,
+      byId: byId,
+      onUpdate: onUpdate,
+      count: count,
+      destroy: destroy,
+      distanceMeters: distanceMeters
+    };
+  }
 
   global.FakeGPS = global.FakeGPS || {};
-  global.FakeGPS.Crates = {
-    update: update,
-    all: all,
-    available: available,
-    nearest: nearest,
-    byId: byId,
-    onUpdate: onUpdate,
-    count: count,
-    distanceMeters: distanceMeters
-  };
+  global.FakeGPS.createCrates = createCrates;
+  global.FakeGPS.Crates = createCrates();
 })(window);

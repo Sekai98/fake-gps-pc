@@ -11,7 +11,7 @@ function createWindow() {
     height: 800,
     minWidth: 980,
     minHeight: 640,
-    title: 'Fake GPS PC v0.1.11.6',
+    title: 'Fake GPS PC v0.1.12',
     backgroundColor: '#0f1419',
     autoHideMenuBar: true,
     webPreferences: {

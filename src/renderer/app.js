@@ -473,9 +473,10 @@
   }
   updateSpeedometer(0);
 
-  // Formato ETA: "~45s", "3min 12s", "1h 23min"
+  // Formato ETA: "~45s", "3min 12s", "1h 23min". NUNCA retorna string vazia.
   function formatETA(seconds) {
-    if (!isFinite(seconds) || seconds <= 0) return '--:--';
+    if (!isFinite(seconds) || seconds < 0) return '--:--';
+    if (seconds < 1) return 'chegando';
     if (seconds < 60) return '~' + Math.round(seconds) + 's';
     const totalSec = Math.round(seconds);
     if (totalSec < 3600) {
@@ -488,18 +489,28 @@
     return h + 'h ' + (m < 10 ? '0' + m : m) + 'min';
   }
 
-  // Atualiza ETA baseado na distancia restante do autopilot + velocidade max do preset
+  // Atualiza ETA baseado na distancia restante do autopilot + velocidade max do preset.
+  // Defensivo: valida refs, loga valores anomalos se window.__fakegps_eta_debug = true.
   function updateETA(currentLat, currentLon) {
-    if (!AutoPilot.isActive()) {
+    if (!speedoEta) return;
+    const active = AutoPilot && typeof AutoPilot.isActive === 'function' && AutoPilot.isActive();
+    if (!active) {
       speedoEta.textContent = '⏱ --:--';
       speedoEta.classList.remove('active');
       return;
     }
-    const remainingMeters = AutoPilot.getRemainingDistanceMeters(currentLat, currentLon);
+    let remainingMeters = 0;
+    if (typeof AutoPilot.getRemainingDistanceMeters === 'function') {
+      remainingMeters = AutoPilot.getRemainingDistanceMeters(currentLat, currentLon);
+    }
     const maxKmh = parseFloat(speedSlider.value) || 1;
-    const etaSeconds = (remainingMeters / 1000) / maxKmh * 3600;
-    speedoEta.textContent = '⏱ ' + formatETA(etaSeconds);
+    const etaSeconds = maxKmh > 0 ? (remainingMeters / 1000) / maxKmh * 3600 : 0;
+    const formatted = formatETA(etaSeconds);
+    speedoEta.textContent = '⏱ ' + (formatted || '--:--');
     speedoEta.classList.add('active');
+    if (window.__fakegps_eta_debug) {
+      console.log('[ETA]', { active, remainingMeters, maxKmh, etaSeconds, formatted });
+    }
   }
 
   // --- Humanidade: provider ---
@@ -1268,7 +1279,7 @@
     });
   }, 100);
 
-  console.log('%c[Fake GPS PC] v0.1.11.6 pronto',
+  console.log('%c[Fake GPS PC] v0.1.12 pronto',
     'background:#1a73e8;color:#fff;padding:2px 6px;border-radius:3px');
   console.log('Controles: joystick (mouse) ou WASD/setas | ⏸ pausar sem perder posicao');
   console.log('Posicao auto-salva a cada 5s + ao fechar');

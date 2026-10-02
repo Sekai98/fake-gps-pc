@@ -2,6 +2,47 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
+## [0.1.12] - 2026-10-01 (Electron) - Prep multi-abas
+
+### Changed - Refatoracao interna (nao visivel pro user)
+Core convertido pra **factory functions** em preparacao pra v0.2.0 (multi-abas). API global mantida como instance default pra compatibilidade.
+
+| Modulo | Factory novo | Instance default (compat) |
+|--------|--------------|--------------------------|
+| `movement.js` | `createMovement(options)` | `FakeGPS.Movement` |
+| `autopilot.js` | `createAutoPilot()` | `FakeGPS.AutoPilot` |
+| `route-planner.js` | `createRoutePlanner({storageKey})` | `FakeGPS.RoutePlanner` |
+| `crates.js` | `createCrates()` | `FakeGPS.Crates` |
+| `persistence.js` | `createPersistence({storageKey})` | `FakeGPS.Persistence` |
+| `map.js` | `createMap({containerId})` | `FakeGPS.Map` (container `#map`) |
+
+Cada instance tem `destroy()` pra limpeza quando a aba fechar.
+
+### Preserved
+- UI identica ao v0.1.11.7
+- Estados persistidos (localStorage) mantidos
+- Zero breaking change pro user
+
+### Backup
+- Tag git `v0.1.11.6-stable` criada antes da refatoracao (git checkout v0.1.11.6-stable pra voltar)
+
+## [0.1.11.7] - 2026-10-01 (Electron)
+
+### Fixed - ETA mais robusto
+- `updateETA` agora defensivo:
+  - Valida que `speedoEta`, `AutoPilot.isActive` e `getRemainingDistanceMeters` existem antes de chamar
+  - Clampa `maxKmh > 0` pra evitar divisao por zero
+  - `formatETA` nunca retorna string vazia (fallback `'--:--'` garantido)
+- Novo estado: `⏱ chegando` quando `etaSeconds < 1` (ate 1 seg do destino)
+- `formatETA` aceita `seconds < 0` como invalido (retorna `--:--` em vez de bug matematico)
+
+### Added - Debug opcional
+- Setando `window.__fakegps_eta_debug = true` no console, cada tick loga `{active, remainingMeters, maxKmh, etaSeconds, formatted}` - pra diagnosticar quando ETA parecer travado
+
+### Files
+- EDIT `src/renderer/app.js` (updateETA + formatETA defensivos)
+- EDIT bump versao em todos arquivos
+
 ## [0.1.11.6] - 2026-10-01 (Electron)
 
 ### Changed

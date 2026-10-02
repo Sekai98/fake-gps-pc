@@ -424,7 +424,7 @@
       get target() { return { lat: CURRENT.lat, lon: CURRENT.lon }; },
       get dynamic() { return (Date.now() - LAST_UPDATE_TS) < 2000; },
       get speedMps() { return CURRENT.speedMps; },
-      version: '0.1.11.6'
+      version: '0.1.12'
     };
   } catch (e) { /* silencio */ }
 
