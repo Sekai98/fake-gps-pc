@@ -1,18 +1,35 @@
 (function (global) {
   'use strict';
 
-  const Map = global.FakeGPS.Map;
-  const Input = global.FakeGPS.Input;
-  const Movement = global.FakeGPS.Movement;
-  const Persistence = global.FakeGPS.Persistence;
   const TabsManager = global.FakeGPS.TabsManager;
   const Humanity = global.FakeGPS.Humanity;
   const Routing = global.FakeGPS.Routing;
-  const AutoPilot = global.FakeGPS.AutoPilot;
-  const Crates = global.FakeGPS.Crates;
-  const RoutePlanner = global.FakeGPS.RoutePlanner;
   const Presets = global.FakeGPS.Presets;
   const CarConfig = global.FakeGPS.CarConfig;
+  const Input = global.FakeGPS.Input;
+
+  // --- Isolamento por aba (alpha3) ---
+  // Pega a aba ativa e cria instances com storageKey namespaced.
+  // Troca de aba = reload da pagina (vai no onswitch mais abaixo).
+  const activeTabId = TabsManager.getActiveId();
+  const activeTab = TabsManager.getActive();
+  console.log('[Tab ativa]', activeTab && activeTab.name, '(' + activeTabId + ')');
+
+  // Persistence e RoutePlanner: isoladas por aba via storageKey
+  const Persistence = global.FakeGPS.createPersistence({
+    storageKey: TabsManager.storageKey(activeTabId, 'state')
+  });
+  const RoutePlanner = global.FakeGPS.createRoutePlanner({
+    storageKey: TabsManager.storageKey(activeTabId, 'route-plan')
+  });
+
+  // Movement/AutoPilot/Crates/Map: compartilham a instance default do window.
+  // Como cada troca de aba faz reload, fica fresh por aba naturalmente.
+  // Presets/CarConfig/Humanity: continuam compartilhados entre abas (config global).
+  const Movement = global.FakeGPS.Movement;
+  const AutoPilot = global.FakeGPS.AutoPilot;
+  const Crates = global.FakeGPS.Crates;
+  const Map = global.FakeGPS.Map;
 
   // --- UI refs ---
   const latEl = document.getElementById('lat');
@@ -1367,10 +1384,11 @@
 
   TabsManager.on('change', renderTabBar);
   TabsManager.on('switch', function () {
-    // Alpha3: aqui vai ter reload/rebuild do contexto da aba
-    renderTabBar();
-    console.log('[Tabs] trocou pra', TabsManager.getActive() && TabsManager.getActive().name,
-      '(troca de contexto chegara no alpha3)');
+    // Alpha3: reload da pagina pra re-bootar com dados da nova aba
+    console.log('[Tabs] trocando pra', TabsManager.getActive() && TabsManager.getActive().name,
+      '- recarregando contexto...');
+    // Pequeno delay pra deixar o saveList terminar
+    setTimeout(function () { window.location.reload(); }, 100);
   });
   renderTabBar();
 
