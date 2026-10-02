@@ -129,6 +129,23 @@
       }
     });
 
+    // Polling da posicao atual: a cada 1s pergunta ao Android e move o marker.
+    // O service persiste a posicao a cada 1s nas SharedPreferences.
+    let lastPolledLat = initLatLon[0];
+    let lastPolledLon = initLatLon[1];
+    setInterval(function () {
+      try {
+        const raw = callAndroid('getCurrentPosition');
+        if (!raw) return;
+        const obj = JSON.parse(raw);
+        if (typeof obj.lat !== 'number' || typeof obj.lon !== 'number') return;
+        if (obj.lat === lastPolledLat && obj.lon === lastPolledLon) return;
+        lastPolledLat = obj.lat;
+        lastPolledLon = obj.lon;
+        youMarker.setLatLng([obj.lat, obj.lon]);
+      } catch (e) { /* silent */ }
+    }, 1000);
+
     // API chamada pelo Android (evaluateJavascript)
     window.FakeGPS = {
       onYouMoved: function (lat, lon) {

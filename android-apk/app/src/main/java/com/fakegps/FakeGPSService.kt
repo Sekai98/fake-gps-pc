@@ -51,8 +51,8 @@ class FakeGPSService : Service() {
 
         const val NOTIF_CHANNEL = "fake_gps_channel"
         const val NOTIF_ID = 42
-        const val UPDATE_INTERVAL_MS = 100L  // 10Hz - mesmo que o Electron
-        const val PERSIST_INTERVAL_MS = 5000L  // salva lat/lon no prefs a cada 5s
+        const val UPDATE_INTERVAL_MS = 50L  // 20Hz - mais suave que o Electron, Chrome Android aprecia
+        const val PERSIST_INTERVAL_MS = 1000L  // salva lat/lon no prefs a cada 1s (serve pro mapa ler posicao fresca)
         const val NOTIF_REFRESH_MS = 1000L  // atualiza notif a cada 1s durante rota
 
         const val PREFS_NAME = "fakegps"
@@ -77,7 +77,9 @@ class FakeGPSService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var lastNotifText: String? = null
 
-    private val PROVIDER_NAME = LocationManager.GPS_PROVIDER
+    // Mock multi-provider: Chrome/Fused as vezes prefere NETWORK. Setamos ambos.
+    private val PROVIDERS = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
+    private val activeProviders = mutableListOf<String>()
     private var speedLabel: TextView? = null
     private var presetWalk: TextView? = null
     private var presetRun: TextView? = null
@@ -215,64 +217,73 @@ class FakeGPSService : Service() {
     // --- Mock provider ---
 
     private fun setupMockProvider() {
-        try {
-            locationManager.addTestProvider(
-                PROVIDER_NAME,
-                false,  // requiresNetwork
-                false,  // requiresSatellite
-                false,  // requiresCell
-                false,  // hasMonetaryCost
-                true,   // supportsAltitude
-                true,   // supportsSpeed
-                true,   // supportsBearing
-                android.location.Criteria.POWER_LOW,
-                android.location.Criteria.ACCURACY_FINE
-            )
-            locationManager.setTestProviderEnabled(PROVIDER_NAME, true)
-            providerAdded = true
-        } catch (e: SecurityException) {
-            // User nao configurou "App de localizacao simulada"
-            // Nao da pra fazer nada, segue sem mock
-            providerAdded = false
-        } catch (e: IllegalArgumentException) {
-            // Provider ja existe
+        activeProviders.clear()
+        PROVIDERS.forEach { provider ->
             try {
-                locationManager.setTestProviderEnabled(PROVIDER_NAME, true)
-                providerAdded = true
-            } catch (ignored: Exception) {}
+                locationManager.addTestProvider(
+                    provider,
+                    false,  // requiresNetwork
+                    false,  // requiresSatellite
+                    false,  // requiresCell
+                    false,  // hasMonetaryCost
+                    true,   // supportsAltitude
+                    true,   // supportsSpeed
+                    true,   // supportsBearing
+                    android.location.Criteria.POWER_LOW,
+                    android.location.Criteria.ACCURACY_FINE
+                )
+                locationManager.setTestProviderEnabled(provider, true)
+                activeProviders.add(provider)
+            } catch (e: SecurityException) {
+                // User nao configurou "App de localizacao simulada"
+            } catch (e: IllegalArgumentException) {
+                // Provider ja existe
+                try {
+                    locationManager.setTestProviderEnabled(provider, true)
+                    activeProviders.add(provider)
+                } catch (ignored: Exception) {}
+            }
         }
+        providerAdded = activeProviders.isNotEmpty()
     }
 
     private fun teardownMockProvider() {
         if (!providerAdded) return
-        try {
-            locationManager.setTestProviderEnabled(PROVIDER_NAME, false)
-            locationManager.removeTestProvider(PROVIDER_NAME)
-        } catch (ignored: Exception) {}
+        activeProviders.forEach { provider ->
+            try {
+                locationManager.setTestProviderEnabled(provider, false)
+                locationManager.removeTestProvider(provider)
+            } catch (ignored: Exception) {}
+        }
+        activeProviders.clear()
         providerAdded = false
     }
 
     private fun publishMockLocation() {
         if (!providerAdded) return
         val snap = engine.snapshot()
-        try {
-            val loc = Location(PROVIDER_NAME).apply {
-                latitude = snap.lat
-                longitude = snap.lon
-                altitude = 0.0
-                accuracy = 5f
-                time = System.currentTimeMillis()
-                elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
-                speed = snap.speedMps
-                bearing = snap.heading
-                if (Build.VERSION.SDK_INT >= 26) {
-                    bearingAccuracyDegrees = 5f
-                    speedAccuracyMetersPerSecond = 1f
-                    verticalAccuracyMeters = 10f
+        val now = System.currentTimeMillis()
+        val elapsed = SystemClock.elapsedRealtimeNanos()
+        activeProviders.forEach { provider ->
+            try {
+                val loc = Location(provider).apply {
+                    latitude = snap.lat
+                    longitude = snap.lon
+                    altitude = 0.0
+                    accuracy = 2f  // GPS fino: 2m. Antes era 5m
+                    time = now
+                    elapsedRealtimeNanos = elapsed
+                    speed = snap.speedMps
+                    bearing = snap.heading
+                    if (Build.VERSION.SDK_INT >= 26) {
+                        bearingAccuracyDegrees = 1f  // 1 grau
+                        speedAccuracyMetersPerSecond = 0.5f
+                        verticalAccuracyMeters = 3f
+                    }
                 }
-            }
-            locationManager.setTestProviderLocation(PROVIDER_NAME, loc)
-        } catch (ignored: Exception) {}
+                locationManager.setTestProviderLocation(provider, loc)
+            } catch (ignored: Exception) {}
+        }
     }
 
     // --- Loop de update ---
@@ -434,8 +445,7 @@ class FakeGPSService : Service() {
             }
         }
 
-        handle.setOnClickListener {
-            dragModeActive = !dragModeActive
+        fun applyDragModeVisual() {
             if (dragModeActive) {
                 handle.setBackgroundColor(0xFFF9AB00.toInt())  // amarelo = modo mover
                 joystick.alpha = 0.3f
@@ -447,6 +457,15 @@ class FakeGPSService : Service() {
                 joystick.setOnTouchListener(null)
                 root.setOnTouchListener(null)
             }
+        }
+
+        // Sempre comeca OFF ao abrir overlay (evita joystick travado)
+        dragModeActive = false
+        applyDragModeVisual()
+
+        handle.setOnClickListener {
+            dragModeActive = !dragModeActive
+            applyDragModeVisual()
         }
     }
 

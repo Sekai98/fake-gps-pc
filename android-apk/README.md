@@ -94,7 +94,8 @@ Av. Paulista, São Paulo (-23.561684, -46.655981). Mesmo default do app Electron
 - v0.2.0-alpha1: joystick flutuante + mock location + walking a 5 km/h fixo
 - v0.2.0-alpha2: presets de velocidade (walk/run/car)
 - v0.2.0-alpha3: persistência de posição + joystick arrastável
-- **v0.2.0-alpha4** (agora): mapa com TP e autopilot, notif dinâmica com km restantes, toggle drag no overlay
+- v0.2.0-alpha4: mapa com TP e autopilot, notif dinâmica com km restantes, toggle drag no overlay
+- **v0.2.0-alpha5** (agora): fixes - joystick não trava mais, marker do mapa segue personagem, precisão GPS maior (20Hz + accuracy 2m + mock NETWORK)
 - v0.2.0: release com orientação 3D opcional
 
 ## Como usar o mapa (alpha4)

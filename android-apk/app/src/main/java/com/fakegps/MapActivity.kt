@@ -118,5 +118,12 @@ class MapActivity : AppCompatActivity() {
                 .setAction(FakeGPSService.ACTION_STOP_ROUTE)
             startService(intent)
         }
+
+        /** Posicao atual do personagem - lida das prefs (service atualiza a cada 5s + no stop). */
+        @JavascriptInterface
+        fun getCurrentPosition(): String {
+            val (lat, lon) = currentLatLon()
+            return JSONObject().put("lat", lat).put("lon", lon).toString()
+        }
     }
 }

@@ -2,6 +2,27 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
+## [0.2.0-alpha5] - 2026-10-02 (Android APK) - Fixes: joystick travado, mapa estático, precisão
+
+### Fixed
+- **Joystick preso em modo mover**: `dragModeActive` persistia entre aberturas do overlay — se o toggle estivesse ligado quando o service foi reiniciado, o joystick não respondia. Agora o estado é resetado pra `false` toda vez que `showOverlay` roda.
+- **Marker azul do mapa interno não acompanhava o personagem**: adicionado bridge `Android.getCurrentPosition()` + poll JS a 1Hz que lê a posição persistida das SharedPreferences e move o marker. `PERSIST_INTERVAL_MS` reduzido de 5000ms pra 1000ms pra o marker ficar fresco.
+
+### Changed - Precisão
+- Mock location agora cobre **GPS_PROVIDER + NETWORK_PROVIDER** (Chrome Android às vezes prefere o network). Antes era só GPS.
+- Push rate: 10Hz → **20Hz** (`UPDATE_INTERVAL_MS` 100 → 50).
+- `accuracy` reportado: 5m → 2m (sinaliza fonte confiável pro Chrome).
+- `bearingAccuracyDegrees` 5° → 1°, `speedAccuracyMetersPerSecond` 1 → 0.5, `verticalAccuracyMeters` 10 → 3.
+
+### Files
+- EDIT `android-apk/app/src/main/java/com/fakegps/FakeGPSService.kt` (PROVIDERS list, 20Hz, reset dragMode, accuracy)
+- EDIT `android-apk/app/src/main/java/com/fakegps/MapActivity.kt` (bridge getCurrentPosition)
+- EDIT `android-apk/app/src/main/assets/map.html` (poll 1s do marker)
+- EDIT `android-apk/app/build.gradle` (versionCode 5, versionName 0.2.0-alpha5)
+
+### Notes
+- Se a precisão ainda estiver abaixo do esperado, o gargalo pode estar no FusedLocationProvider do Google Play Services (que agrega múltiplos sinais e nem sempre respeita o test provider). Esse caso requer approach diferente — provavelmente injetar via `android.location.LocationManager.FUSED_PROVIDER` que exige targetSdk >= 31 e permissões especiais.
+
 ## [0.2.0-alpha4] - 2026-10-02 (Android APK) - Mapa + autopilot + notif dinâmica + toggle drag
 
 ### Added
