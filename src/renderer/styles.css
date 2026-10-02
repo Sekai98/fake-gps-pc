@@ -270,6 +270,91 @@ body { display: flex; flex-direction: column; }
   z-index: 1;
 }
 
+/* ---- Tab bar (multi-abas) ---- */
+.tab-bar {
+  display: flex;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  padding: 0 10px;
+  gap: 2px;
+  overflow-x: auto;
+  flex-shrink: 0;
+  min-height: 36px;
+  align-items: flex-end;
+}
+.tab {
+  display: flex;
+  align-items: center;
+  padding: 7px 12px;
+  background: var(--panel-dark);
+  color: var(--muted);
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  gap: 6px;
+  user-select: none;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  margin-top: 4px;
+  white-space: nowrap;
+  transition: background 0.1s, color 0.1s;
+}
+.tab:hover:not(.active) { background: rgba(255,255,255,0.05); color: var(--text); }
+.tab.active {
+  background: var(--bg);
+  color: var(--text);
+  border-color: var(--accent);
+  border-bottom: 2px solid var(--bg);
+  margin-bottom: -1px;
+  font-weight: 500;
+}
+.tab-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.tab.active .tab-dot { background: #4caf50; box-shadow: 0 0 4px #4caf50; }
+.tab-name { font-weight: inherit; }
+.tab-close {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 13px;
+  opacity: 0.5;
+  border-radius: 2px;
+  line-height: 1;
+}
+.tab-close:hover { opacity: 1; color: var(--err); background: rgba(229,57,53,0.1); }
+.tab-add {
+  display: flex;
+  align-items: center;
+  padding: 7px 14px;
+  background: transparent;
+  color: var(--muted);
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: 4px;
+  margin-left: 4px;
+  font-size: 14px;
+  font-family: inherit;
+}
+.tab-add:hover { color: var(--accent); border-color: var(--accent); background: rgba(26,115,232,0.05); }
+.tab-name-input {
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+  width: 90px;
+  padding: 0;
+}
+
 /* ---- Modal (overlay) ---- */
 .modal-overlay {
   position: fixed;

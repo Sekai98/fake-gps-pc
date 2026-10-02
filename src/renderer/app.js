@@ -5,6 +5,7 @@
   const Input = global.FakeGPS.Input;
   const Movement = global.FakeGPS.Movement;
   const Persistence = global.FakeGPS.Persistence;
+  const TabsManager = global.FakeGPS.TabsManager;
   const Humanity = global.FakeGPS.Humanity;
   const Routing = global.FakeGPS.Routing;
   const AutoPilot = global.FakeGPS.AutoPilot;
@@ -1278,6 +1279,100 @@
       }
     });
   }, 100);
+
+  // --- Tab bar (UI das abas - alpha2: s/ troca de contexto real) ---
+  const tabBarEl = document.getElementById('tab-bar');
+
+  function renderTabBar() {
+    if (!tabBarEl) return;
+    tabBarEl.innerHTML = '';
+    const activeId = TabsManager.getActiveId();
+    TabsManager.all().forEach(function (tab) {
+      const el = document.createElement('div');
+      el.className = 'tab' + (tab.id === activeId ? ' active' : '');
+      el.dataset.tabId = tab.id;
+      el.innerHTML = [
+        '<span class="tab-dot"></span>',
+        '<span class="tab-name" data-rename>', escapeHtml(tab.name), '</span>',
+        (TabsManager.all().length > 1
+          ? '<button class="tab-close" title="Fechar aba">✕</button>'
+          : '')
+      ].join('');
+
+      // Click: troca aba ativa (ainda nao troca contexto real - alpha3)
+      el.addEventListener('click', function (e) {
+        if (e.target.classList.contains('tab-close')) return;
+        if (e.target.hasAttribute('data-rename') && e.detail === 2) return; // dblclick trata separado
+        TabsManager.switchTo(tab.id);
+      });
+
+      // Duplo-click no nome: renomeia inline
+      const nameEl = el.querySelector('[data-rename]');
+      nameEl.addEventListener('dblclick', function (e) {
+        e.stopPropagation();
+        startRename(tab.id, nameEl);
+      });
+
+      // Click no X: remove (com confirm)
+      const closeBtn = el.querySelector('.tab-close');
+      if (closeBtn) {
+        closeBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          if (confirm('Fechar aba "' + tab.name + '"? Essa ação apaga o estado dela.')) {
+            TabsManager.remove(tab.id);
+          }
+        });
+      }
+
+      tabBarEl.appendChild(el);
+    });
+
+    // Botao "+"
+    const addBtn = document.createElement('button');
+    addBtn.className = 'tab-add';
+    addBtn.title = 'Nova aba';
+    addBtn.textContent = '+';
+    addBtn.addEventListener('click', function () {
+      const tab = TabsManager.create();
+      TabsManager.switchTo(tab.id);
+    });
+    tabBarEl.appendChild(addBtn);
+  }
+
+  function startRename(tabId, nameEl) {
+    const currentName = nameEl.textContent;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'tab-name-input';
+    input.value = currentName;
+    input.maxLength = 20;
+    nameEl.replaceWith(input);
+    input.focus();
+    input.select();
+
+    function commit() {
+      const newName = input.value.trim();
+      if (newName && newName !== currentName) {
+        TabsManager.rename(tabId, newName);
+      } else {
+        renderTabBar();
+      }
+    }
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { input.blur(); }
+      if (e.key === 'Escape') { input.value = currentName; input.blur(); }
+    });
+  }
+
+  TabsManager.on('change', renderTabBar);
+  TabsManager.on('switch', function () {
+    // Alpha3: aqui vai ter reload/rebuild do contexto da aba
+    renderTabBar();
+    console.log('[Tabs] trocou pra', TabsManager.getActive() && TabsManager.getActive().name,
+      '(troca de contexto chegara no alpha3)');
+  });
+  renderTabBar();
 
   console.log('%c[Fake GPS PC] v0.1.12 pronto',
     'background:#1a73e8;color:#fff;padding:2px 6px;border-radius:3px');
