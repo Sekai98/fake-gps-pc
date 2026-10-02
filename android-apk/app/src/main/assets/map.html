@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>FakeGPS Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    html, body { margin: 0; height: 100%; background: #0f1419; color: #e8eaed; font-family: sans-serif; }
+    #map { position: absolute; top: 0; bottom: 60px; left: 0; right: 0; }
+    #bar {
+      position: absolute; bottom: 0; left: 0; right: 0; height: 60px;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 12px; background: #1a2029; border-top: 1px solid #333a44;
+      box-sizing: border-box;
+    }
+    #info { font-size: 13px; color: #9aa0a6; flex: 1; margin-right: 8px; }
+    button {
+      background: #4285f4; color: #fff; border: none; padding: 10px 14px;
+      border-radius: 4px; font-size: 14px; font-weight: bold;
+      touch-action: manipulation;
+    }
+    button:disabled { background: #333a44; color: #666; }
+    .mode-pill {
+      display: inline-block; padding: 4px 8px; margin-right: 6px; border-radius: 3px;
+      font-size: 11px; font-weight: bold;
+    }
+    .mode-pill.tp { background: #0f9d58; color: #fff; }
+    .mode-pill.walk { background: #f9ab00; color: #000; }
+    .mode-toggle {
+      position: absolute; top: 10px; right: 10px; z-index: 1000;
+      background: #1a2029; padding: 6px; border-radius: 4px;
+      border: 1px solid #333a44;
+    }
+    .mode-toggle label { font-size: 12px; margin-right: 6px; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="mode-toggle">
+    <span class="mode-pill tp" id="pill-tp">TP</span>
+    <span class="mode-pill walk" id="pill-walk" style="display:none">ANDAR</span>
+    <label><input type="checkbox" id="mode-walk"/> Andar sozinho</label>
+  </div>
+  <div id="bar">
+    <div id="info">Toque no mapa pra ir</div>
+    <button id="btn-stop-route" style="background:#e53935; display:none;">Parar rota</button>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    // Bridge Android (injetado via addJavascriptInterface como "Android")
+    function callAndroid(method, arg1, arg2) {
+      try {
+        if (window.Android && typeof window.Android[method] === 'function') {
+          if (arg2 !== undefined) return window.Android[method](arg1, arg2);
+          if (arg1 !== undefined) return window.Android[method](arg1);
+          return window.Android[method]();
+        }
+      } catch (e) { console.error(e); }
+      return null;
+    }
+
+    const initLatLon = (function () {
+      try {
+        const raw = callAndroid('getInitialLatLon');
+        if (raw) {
+          const obj = JSON.parse(raw);
+          return [obj.lat, obj.lon];
+        }
+      } catch (e) {}
+      return [-23.561684, -46.655981];
+    })();
+
+    const map = L.map('map').setView(initLatLon, 16);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OSM'
+    }).addTo(map);
+
+    const youIcon = L.divIcon({
+      className: 'you-marker',
+      html: '<div style="width:16px;height:16px;background:#4285f4;border:3px solid #fff;border-radius:50%;box-shadow:0 0 8px #4285f4;"></div>',
+      iconSize: [22, 22],
+      iconAnchor: [11, 11]
+    });
+    const youMarker = L.marker(initLatLon, { icon: youIcon }).addTo(map);
+    let destMarker = null;
+    let routeLine = null;
+
+    const info = document.getElementById('info');
+    const btnStop = document.getElementById('btn-stop-route');
+    const modeWalk = document.getElementById('mode-walk');
+    const pillTp = document.getElementById('pill-tp');
+    const pillWalk = document.getElementById('pill-walk');
+
+    modeWalk.addEventListener('change', function () {
+      if (modeWalk.checked) {
+        pillTp.style.display = 'none';
+        pillWalk.style.display = 'inline-block';
+        info.textContent = 'Toque no mapa pra criar rota';
+      } else {
+        pillTp.style.display = 'inline-block';
+        pillWalk.style.display = 'none';
+        info.textContent = 'Toque no mapa pra ir';
+      }
+    });
+
+    btnStop.addEventListener('click', function () {
+      callAndroid('stopRoute');
+      if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+      if (destMarker) { map.removeLayer(destMarker); destMarker = null; }
+      btnStop.style.display = 'none';
+      info.textContent = 'Rota cancelada';
+    });
+
+    map.on('click', function (e) {
+      const lat = e.latlng.lat;
+      const lon = e.latlng.lng;
+      if (destMarker) map.removeLayer(destMarker);
+      destMarker = L.marker([lat, lon]).addTo(map);
+
+      if (modeWalk.checked) {
+        info.textContent = 'Buscando rota...';
+        callAndroid('startRoute', lat, lon);
+      } else {
+        info.textContent = 'Teleportando...';
+        callAndroid('teleport', lat, lon);
+      }
+    });
+
+    // API chamada pelo Android (evaluateJavascript)
+    window.FakeGPS = {
+      onYouMoved: function (lat, lon) {
+        youMarker.setLatLng([lat, lon]);
+      },
+      onRouteReady: function (waypointsJson, distanceM) {
+        const pts = JSON.parse(waypointsJson);
+        if (routeLine) map.removeLayer(routeLine);
+        routeLine = L.polyline(pts.map(function (p) { return [p.lat, p.lon]; }), {
+          color: '#f9ab00', weight: 4, opacity: 0.85
+        }).addTo(map);
+        info.textContent = 'Rota: ' + (distanceM / 1000).toFixed(2) + ' km';
+        btnStop.style.display = 'block';
+      },
+      onRouteError: function (msg) {
+        info.textContent = 'Erro: ' + msg;
+      },
+      onRouteDone: function () {
+        info.textContent = 'Chegou!';
+        if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+        if (destMarker) { map.removeLayer(destMarker); destMarker = null; }
+        btnStop.style.display = 'none';
+      },
+      onTeleported: function (lat, lon) {
+        youMarker.setLatLng([lat, lon]);
+        info.textContent = 'Pos: ' + lat.toFixed(5) + ', ' + lon.toFixed(5);
+      }
+    };
+  </script>
+</body>
+</html>

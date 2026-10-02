@@ -39,6 +39,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnDevOptions: Button
     private lateinit var btnStart: Button
     private lateinit var btnStop: Button
+    private lateinit var btnMap: Button
 
     private val PERM_REQUEST_LOCATION = 1001
     private val PERM_REQUEST_NOTIF = 1002
@@ -56,6 +57,7 @@ class MainActivity : AppCompatActivity() {
         btnDevOptions = findViewById(R.id.btn_dev_options)
         btnStart = findViewById(R.id.btn_start)
         btnStop = findViewById(R.id.btn_stop)
+        btnMap = findViewById(R.id.btn_map)
 
         btnOverlay.setOnClickListener { requestOverlayPermission() }
         btnLocation.setOnClickListener { requestLocationPermission() }
@@ -63,6 +65,7 @@ class MainActivity : AppCompatActivity() {
         btnDevOptions.setOnClickListener { openDevOptions() }
         btnStart.setOnClickListener { startFakeGPS() }
         btnStop.setOnClickListener { stopFakeGPS() }
+        btnMap.setOnClickListener { startActivity(Intent(this, MapActivity::class.java)) }
     }
 
     override fun onResume() {

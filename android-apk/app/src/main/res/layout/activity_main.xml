@@ -126,6 +126,15 @@
             android:layout_marginTop="12dp"
             android:backgroundTint="#e53935"/>
 
+        <Button
+            android:id="@+id/btn_map"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🗺  Abrir mapa (TP ou andar sozinho)"
+            android:textAllCaps="false"
+            android:layout_marginTop="12dp"
+            android:backgroundTint="#4285f4"/>
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

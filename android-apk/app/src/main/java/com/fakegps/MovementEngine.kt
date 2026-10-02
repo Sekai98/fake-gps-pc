@@ -27,6 +27,11 @@ class MovementEngine(startLat: Double, startLon: Double) {
     @Volatile var heading: Float = 0f
     @Volatile var speedMps: Float = 0f
 
+    fun setPosition(newLat: Double, newLon: Double) {
+        lat = newLat
+        lon = newLon
+    }
+
     // Config
     @Volatile var maxSpeedKmh: Float = 5f  // walking default
 

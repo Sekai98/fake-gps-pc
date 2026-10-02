@@ -2,6 +2,56 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
+## [0.2.0-alpha4] - 2026-10-02 (Android APK) - Mapa + autopilot + notif dinâmica + toggle drag
+
+### Added
+- **Mapa interno** (nova `MapActivity`): WebView carregando Leaflet com tiles OSM. Dois modos:
+  - **TP** (default): toque teleporta imediatamente pra posição.
+  - **Andar sozinho**: toque busca rota a pé via OSRM (`routing.openstreetmap.de/routed-foot`) e inicia autopilot no `FakeGPSService`. Rota desenhada em laranja no mapa.
+- **AutoPilot** (`AutoPilot.kt`): porta da lógica do Electron. Avança waypoints, slowdown nos últimos 15m, respeita a velocidade do preset ativo (walk/run/car).
+- **Routing** (`Routing.kt`): porta OSRM foot com prefixo/sufixo em linha reta pra chegar no ponto exato clicado.
+- **Notificação dinâmica**: durante rota ativa mostra `X.XX km restantes - Y.Y km/h` e atualiza 1x/s. Ações:
+  - `Parar rota` (cancela autopilot, deixa overlay)
+  - `Joystick` (reabre overlay se foi fechado via ✕ sem derrubar o serviço)
+  - `Parar app` (desliga tudo)
+- **Toggle drag** no overlay: botão `⋮⋮` virou toggle. OFF = comportamento normal; ON = joystick fica dim e todo o overlay pode ser arrastado pela tela.
+- Novas actions no `FakeGPSService`: `ACTION_SET_ROUTE`, `ACTION_STOP_ROUTE`, `ACTION_TELEPORT`, `ACTION_SHOW_OVERLAY`.
+- Permissão `INTERNET` adicionada (Leaflet CDN + tiles OSM + OSRM).
+
+### Files
+- CREATE `android-apk/app/src/main/java/com/fakegps/AutoPilot.kt`
+- CREATE `android-apk/app/src/main/java/com/fakegps/Routing.kt`
+- CREATE `android-apk/app/src/main/java/com/fakegps/MapActivity.kt`
+- CREATE `android-apk/app/src/main/assets/map.html`
+- CREATE `android-apk/app/src/main/res/layout/activity_map.xml`
+- EDIT `android-apk/app/src/main/java/com/fakegps/FakeGPSService.kt` (actions, autopilot wire, notif dinâmica, toggle drag, overlay persist, autopilot prioriza joystick)
+- EDIT `android-apk/app/src/main/java/com/fakegps/MainActivity.kt` (botão "Abrir mapa")
+- EDIT `android-apk/app/src/main/res/layout/activity_main.xml` (btn_map)
+- EDIT `android-apk/app/src/main/AndroidManifest.xml` (INTERNET, MapActivity)
+- EDIT `android-apk/app/build.gradle` (versionCode 4, versionName 0.2.0-alpha4)
+
+### Notes
+- Autopilot usa a velocidade do preset selecionado no joystick (walk 5 / run 12 / car 50 km/h). Trocar o preset enquanto a rota está ativa altera a velocidade imediatamente.
+- `publishMockLocation` roda a 10Hz (igual Electron), notif atualiza a 1Hz pra não ficar reescrevendo texto rápido demais.
+- APK continua **independente** do Fake GPS PC; não precisa do Electron rodando.
+
+## [0.2.0-alpha3] - 2026-10-02 (Android APK) - Persistência de posição + joystick arrastável
+
+### Added
+- **Persistência de lat/lon**: `FakeGPSService` salva a posição atual em `SharedPreferences` ao parar e a cada 5s. Ao reabrir o app, a última posição é restaurada (não cai mais em Av. Paulista fixo).
+- **Drag handle no overlay**: novo botão `⋮⋮` no cabeçalho do joystick permite arrastar o overlay inteiro pela tela. Posição salva em `SharedPreferences` ao soltar.
+- `MovementEngine.setPosition(lat, lon)` adicionado (prep pra teleporte via mapa na alpha5).
+
+### Files
+- EDIT `android-apk/app/src/main/java/com/fakegps/FakeGPSService.kt` (SharedPreferences lat/lon/overlay_x/y, persistLoop, attachDrag)
+- EDIT `android-apk/app/src/main/java/com/fakegps/MovementEngine.kt` (setPosition)
+- EDIT `android-apk/app/src/main/res/layout/overlay_joystick.xml` (drag_handle)
+- EDIT `android-apk/app/build.gradle` (versionCode 3, versionName 0.2.0-alpha3)
+
+### Notes
+- APK é **independente** do Fake GPS do PC; não requer o servidor Electron.
+- Próximas alphas: ação na notificação pra reabrir joystick sem voltar no app (alpha4), mapa clicável dentro do app (alpha5).
+
 ## [0.1.12] - 2026-10-01 (Electron) - Prep multi-abas
 
 ### Changed - Refatoracao interna (nao visivel pro user)

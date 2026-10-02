@@ -89,11 +89,18 @@ O app vai te guiar passo a passo, mas pra conferência:
 
 Av. Paulista, São Paulo (-23.561684, -46.655981). Mesmo default do app Electron.
 
-**v0.2.0-alpha1 ainda não tem**: botão de teleporte, sliders de velocidade, orientação. Esses vêm nos alphas seguintes.
-
 ## Status atual
 
-- **v0.2.0-alpha1** (agora): joystick flutuante + mock location + walking a 5 km/h fixo
-- v0.2.0-alpha2: sliders de velocidade (walk/run/carro) + botão de teleporte
-- v0.2.0-alpha3: motion sensors sintéticos (acelerômetro/bússola)
+- v0.2.0-alpha1: joystick flutuante + mock location + walking a 5 km/h fixo
+- v0.2.0-alpha2: presets de velocidade (walk/run/car)
+- v0.2.0-alpha3: persistência de posição + joystick arrastável
+- **v0.2.0-alpha4** (agora): mapa com TP e autopilot, notif dinâmica com km restantes, toggle drag no overlay
 - v0.2.0: release com orientação 3D opcional
+
+## Como usar o mapa (alpha4)
+
+1. Abre o app FakeGPS, clica **🗺 Abrir mapa**.
+2. Modo **TP** (default): toque no mapa teleporta imediatamente.
+3. Modo **Andar sozinho**: ativa a checkbox no canto superior direito; toque no mapa gera a rota a pé (OSRM) e o personagem começa a andar sozinho na velocidade do preset ativo (walk/run/car).
+4. Durante rota, a notificação mostra `X.XX km restantes - Y.Y km/h`. Botões: `Parar rota`, `Joystick` (reabre overlay se foi fechado), `Parar app`.
+5. O botão `⋮⋮` no cabeçalho do joystick é um **toggle de modo mover**: ativa → arrasta o overlay inteiro, desativa → joystick normal.
