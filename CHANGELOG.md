@@ -2,6 +2,15 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
+## [0.2.0-alpha6.1] - 2026-10-02 (Android APK) - Hotfix: permitir HTTP cleartext (modo slave)
+
+### Fixed
+- `android:usesCleartextTraffic="true"` no AndroidManifest. Sem isso, Android 9+ bloqueia qualquer conexão HTTP não-HTTPS, incluindo `http://192.168.X.Y:3477` do modo slave. Erro silencioso que impedia o "Testar" de funcionar.
+
+### Files
+- EDIT `android-apk/app/src/main/AndroidManifest.xml` (usesCleartextTraffic)
+- EDIT `android-apk/app/build.gradle` (versionCode 7, versionName 0.2.0-alpha6.1)
+
 ## [infra] - 2026-10-02 (Android APK CI) - Nome do APK e artifact incluem versão
 
 ### Changed
