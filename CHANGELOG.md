@@ -2,6 +2,15 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
+## [infra] - 2026-10-02 (Android APK CI) - Nome do APK e artifact incluem versão
+
+### Changed
+- `android-apk/app/build.gradle`: `applicationVariants.all` configura `outputFileName` como `FakeGPS-${versionName}-${buildType}.apk` (ex: `FakeGPS-0.2.0-alpha6-debug.apk`) em vez de `app-debug.apk`.
+- `.github/workflows/android-build.yml`: extrai `versionName` do build.gradle e usa como sufixo do artifact name: `fake-gps-apk-0.2.0-alpha6.zip` em vez de `fake-gps-apk.zip`.
+
+### Why
+- Facilita separar APKs baixados: cada alpha fica com nome único.
+
 ## [0.2.0-alpha6] - 2026-10-02 (Android APK) - Modo slave (controle pelo Fake GPS Electron)
 
 ### Added - Modo slave

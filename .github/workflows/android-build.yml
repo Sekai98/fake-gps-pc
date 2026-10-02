@@ -1,7 +1,7 @@
 name: Android APK Build
 
 # Compila APK debug toda vez que push ou tag.
-# Baixar o APK: GitHub -> Actions -> run ultimo -> Artifacts -> fake-gps-apk.zip
+# Baixar o APK: GitHub -> Actions -> run ultimo -> Artifacts -> fake-gps-apk-<versao>.zip
 
 on:
   push:
@@ -38,6 +38,13 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      - name: Extract versionName
+        id: version
+        run: |
+          VERSION=$(grep 'versionName' android-apk/app/build.gradle | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Versao detectada: $VERSION"
+
       - name: Build debug APK
         working-directory: android-apk
         run: gradle assembleDebug --no-daemon --stacktrace
@@ -45,6 +52,6 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: fake-gps-apk
+          name: fake-gps-apk-${{ steps.version.outputs.version }}
           path: android-apk/app/build/outputs/apk/debug/*.apk
           retention-days: 30

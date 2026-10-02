@@ -34,6 +34,14 @@ android {
     buildFeatures {
         viewBinding false
     }
+
+    // Nome do APK gerado inclui versionName pra separar os binarios baixados.
+    // Resultado: FakeGPS-0.2.0-alpha7-debug.apk em vez de app-debug.apk.
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            outputFileName = "FakeGPS-${variant.versionName}-${variant.buildType.name}.apk"
+        }
+    }
 }
 
 dependencies {
