@@ -25,6 +25,8 @@ import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
+import java.net.HttpURLConnection
+import java.net.URL
 
 /**
  * Foreground Service: aplica mock location periodicamente + mostra overlay com joystick.
@@ -44,10 +46,17 @@ class FakeGPSService : Service() {
         const val ACTION_STOP_ROUTE = "com.fakegps.ACTION_STOP_ROUTE"
         const val ACTION_TELEPORT = "com.fakegps.ACTION_TELEPORT"
         const val ACTION_SHOW_OVERLAY = "com.fakegps.ACTION_SHOW_OVERLAY"
+        const val ACTION_START_SLAVE = "com.fakegps.ACTION_START_SLAVE"
 
         const val EXTRA_WAYPOINTS = "waypoints"
         const val EXTRA_LAT = "lat"
         const val EXTRA_LON = "lon"
+        const val EXTRA_SLAVE_URL = "slave_url"
+        const val EXTRA_SLAVE_TAB = "slave_tab"
+
+        const val KEY_SLAVE_URL = "slave_url"
+        const val KEY_SLAVE_TAB = "slave_tab"
+        const val SLAVE_POLL_INTERVAL_MS = 100L  // 10Hz - igual Electron publica
 
         const val NOTIF_CHANNEL = "fake_gps_channel"
         const val NOTIF_ID = 42
@@ -76,6 +85,14 @@ class FakeGPSService : Service() {
     private var running = false
     private var wakeLock: PowerManager.WakeLock? = null
     private var lastNotifText: String? = null
+
+    // --- Modo slave (controlado pelo PC) ---
+    @Volatile private var slaveMode = false
+    @Volatile private var slaveUrl: String? = null
+    @Volatile private var slaveTab: String = ""
+    @Volatile private var slaveLastSuccessMs: Long = 0
+    @Volatile private var slaveLastError: String? = null
+    private val slaveExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
 
     // Mock multi-provider: Chrome/Fused as vezes prefere NETWORK. Setamos ambos.
     private val PROVIDERS = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
@@ -114,6 +131,10 @@ class FakeGPSService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> start()
+            ACTION_START_SLAVE -> startAsSlave(
+                intent.getStringExtra(EXTRA_SLAVE_URL) ?: "",
+                intent.getStringExtra(EXTRA_SLAVE_TAB) ?: ""
+            )
             ACTION_STOP -> {
                 stop()
                 stopSelf()
@@ -126,6 +147,24 @@ class FakeGPSService : Service() {
             }
         }
         return START_NOT_STICKY
+    }
+
+    private fun startAsSlave(url: String, tab: String) {
+        if (url.isBlank()) return
+        slaveMode = true
+        slaveUrl = url.trimEnd('/')
+        slaveTab = tab.trim()
+        slaveLastSuccessMs = 0
+        slaveLastError = null
+        if (!running) {
+            start()
+        } else {
+            // Ja rodando como standalone - cancela autopilot local e inicia poll remoto
+            autopilot.stop()
+            currentInput = MovementEngine.Input(0f, 0f, 0f, 0f)
+            handler.post(slavePollLoop)
+            refreshNotification()
+        }
     }
 
     private fun handleSetRoute(intent: Intent) {
@@ -174,11 +213,13 @@ class FakeGPSService : Service() {
         handler.post(updateLoop)
         handler.postDelayed(persistLoop, PERSIST_INTERVAL_MS)
         handler.postDelayed(notifLoop, NOTIF_REFRESH_MS)
+        if (slaveMode) handler.post(slavePollLoop)
     }
 
     private fun stop() {
         if (!running) return
         running = false
+        slaveMode = false
 
         handler.removeCallbacksAndMessages(null)
         persistPosition()
@@ -297,19 +338,21 @@ class FakeGPSService : Service() {
             val dt = if (lastUpdateMs == 0L) 0f else ((now - lastUpdateMs) / 1000f).coerceAtMost(0.1f)
             lastUpdateMs = now
 
-            // Autopilot tem prioridade sobre o joystick
-            val input = if (autopilot.isActive()) {
-                autopilot.computeInput(engine.lat, engine.lon) ?: MovementEngine.Input(0f, 0f, 0f, 0f)
-            } else {
-                currentInput
+            if (!slaveMode) {
+                // Modo standalone: integra engine com joystick/autopilot
+                val input = if (autopilot.isActive()) {
+                    autopilot.computeInput(engine.lat, engine.lon) ?: MovementEngine.Input(0f, 0f, 0f, 0f)
+                } else {
+                    currentInput
+                }
+                engine.update(dt, input)
             }
+            // No modo slave, a posicao ja foi atualizada pelo slavePollLoop via engine.teleport.
 
-            engine.update(dt, input)
             publishMockLocation()
             updateSpeedLabel()
 
-            // Se autopilot terminou nesse tick, limpa notif
-            if (!autopilot.isActive() && lastNotifText != null) {
+            if (!slaveMode && !autopilot.isActive() && lastNotifText != null) {
                 refreshNotification()
             }
 
@@ -320,8 +363,59 @@ class FakeGPSService : Service() {
     private val notifLoop = object : Runnable {
         override fun run() {
             if (!running) return
-            if (autopilot.isActive()) refreshNotification()
+            if (autopilot.isActive() || slaveMode) refreshNotification()
             handler.postDelayed(this, NOTIF_REFRESH_MS)
+        }
+    }
+
+    /**
+     * Loop de poll do Electron. GET /location (ou /location?tab=X) e aplica no engine.
+     * Dispara requisicao em thread separada pra nao bloquear o main thread.
+     */
+    private val slavePollLoop = object : Runnable {
+        override fun run() {
+            if (!running || !slaveMode) return
+            val base = slaveUrl
+            if (base != null) {
+                val urlStr = if (slaveTab.isNotEmpty()) "$base/location?tab=$slaveTab" else "$base/location"
+                slaveExecutor.execute { pollOnce(urlStr) }
+            }
+            handler.postDelayed(this, SLAVE_POLL_INTERVAL_MS)
+        }
+    }
+
+    private fun pollOnce(urlStr: String) {
+        try {
+            val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
+                connectTimeout = 2000
+                readTimeout = 2000
+                requestMethod = "GET"
+            }
+            val code = conn.responseCode
+            if (code != 200) {
+                conn.disconnect()
+                slaveLastError = "HTTP $code"
+                return
+            }
+            val body = conn.inputStream.bufferedReader().use { it.readText() }
+            conn.disconnect()
+            val obj = org.json.JSONObject(body)
+            val lat = obj.optDouble("lat", Double.NaN)
+            val lon = obj.optDouble("lon", Double.NaN)
+            if (lat.isNaN() || lon.isNaN()) {
+                slaveLastError = "payload sem lat/lon"
+                return
+            }
+            val heading = obj.optDouble("heading", 0.0).toFloat()
+            val speedMps = obj.optDouble("speedMps", 0.0).toFloat()
+
+            engine.setPosition(lat, lon)
+            engine.heading = heading
+            engine.speedMps = speedMps
+            slaveLastSuccessMs = SystemClock.elapsedRealtime()
+            slaveLastError = null
+        } catch (e: Exception) {
+            slaveLastError = e.message ?: "erro desconhecido"
         }
     }
 
@@ -404,6 +498,14 @@ class FakeGPSService : Service() {
         overlayParams = params
 
         attachToggleDrag(dragHandle, joystick, root, params)
+
+        // Em modo slave, joystick e presets ficam desabilitados visualmente -
+        // o controle vem do PC. Soh o drag handle fica funcional pra mover overlay.
+        if (slaveMode) {
+            joystick.alpha = 0.3f
+            joystick.setOnTouchListener { _, _ -> true }
+            presets.forEach { p -> p.view()?.alpha = 0.4f }
+        }
     }
 
     private var dragModeActive = false
@@ -511,25 +613,42 @@ class FakeGPSService : Service() {
             .setContentIntent(openPending)
             .setOngoing(true)
 
-        if (autopilot.isActive()) {
-            val remaining = autopilot.remainingMeters(engine.lat, engine.lon)
-            val remainingKm = remaining / 1000.0
-            title = "Em rota"
-            text = if (remainingKm >= 1.0)
-                String.format("%.2f km restantes - %.1f km/h", remainingKm, engine.speedMps * 3.6f)
-            else
-                String.format("%d m restantes - %.1f km/h", remaining.toInt(), engine.speedMps * 3.6f)
-            val stopRoutePending = pendingService(3, ACTION_STOP_ROUTE)
-            builder
-                .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Parar rota", stopRoutePending)
-                .addAction(android.R.drawable.ic_menu_mylocation, "Joystick", showOverlayPending)
-                .addAction(android.R.drawable.ic_lock_power_off, "Parar app", stopPending)
-        } else {
-            title = "Fake GPS ativo"
-            text = "Toque pra abrir o app"
-            builder
-                .addAction(android.R.drawable.ic_menu_mylocation, "Joystick", showOverlayPending)
-                .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Parar", stopPending)
+        when {
+            slaveMode -> {
+                val sinceOk = if (slaveLastSuccessMs > 0)
+                    (SystemClock.elapsedRealtime() - slaveLastSuccessMs) / 1000.0
+                else -1.0
+                val connected = sinceOk in 0.0..3.0
+                title = if (connected) "SLAVE - controlado pelo PC" else "SLAVE - sem conexao"
+                text = if (connected)
+                    String.format("%s | %.1f km/h", slaveUrl ?: "", engine.speedMps * 3.6f)
+                else
+                    (slaveLastError ?: "aguardando primeira resposta")
+                builder
+                    .addAction(android.R.drawable.ic_menu_mylocation, "Joystick", showOverlayPending)
+                    .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Parar", stopPending)
+            }
+            autopilot.isActive() -> {
+                val remaining = autopilot.remainingMeters(engine.lat, engine.lon)
+                val remainingKm = remaining / 1000.0
+                title = "Em rota"
+                text = if (remainingKm >= 1.0)
+                    String.format("%.2f km restantes - %.1f km/h", remainingKm, engine.speedMps * 3.6f)
+                else
+                    String.format("%d m restantes - %.1f km/h", remaining.toInt(), engine.speedMps * 3.6f)
+                val stopRoutePending = pendingService(3, ACTION_STOP_ROUTE)
+                builder
+                    .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Parar rota", stopRoutePending)
+                    .addAction(android.R.drawable.ic_menu_mylocation, "Joystick", showOverlayPending)
+                    .addAction(android.R.drawable.ic_lock_power_off, "Parar app", stopPending)
+            }
+            else -> {
+                title = "Fake GPS ativo"
+                text = "Toque pra abrir o app"
+                builder
+                    .addAction(android.R.drawable.ic_menu_mylocation, "Joystick", showOverlayPending)
+                    .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Parar", stopPending)
+            }
         }
 
         lastNotifText = text

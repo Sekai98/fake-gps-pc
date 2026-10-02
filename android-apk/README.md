@@ -95,8 +95,24 @@ Av. Paulista, São Paulo (-23.561684, -46.655981). Mesmo default do app Electron
 - v0.2.0-alpha2: presets de velocidade (walk/run/car)
 - v0.2.0-alpha3: persistência de posição + joystick arrastável
 - v0.2.0-alpha4: mapa com TP e autopilot, notif dinâmica com km restantes, toggle drag no overlay
-- **v0.2.0-alpha5** (agora): fixes - joystick não trava mais, marker do mapa segue personagem, precisão GPS maior (20Hz + accuracy 2m + mock NETWORK)
+- v0.2.0-alpha5: fixes - joystick não trava mais, marker do mapa segue personagem, precisão GPS maior
+- **v0.2.0-alpha6** (agora): modo slave - APK controlado pelo Fake GPS Electron do PC via WiFi
 - v0.2.0: release com orientação 3D opcional
+
+## Modo slave (alpha6)
+
+Permite controlar a localização do celular DO PC usando o Fake GPS Electron:
+
+1. **No PC**: abre o Fake GPS Electron (ele automaticamente abre server HTTP em `0.0.0.0:3477`).
+2. Descobre o IP do PC na rede: no Electron, clica **📡 Sensor remoto** - mostra IPs da LAN. Pode ser `192.168.0.xxx` ou `192.168.1.xxx` tipicamente.
+3. **No celular**: abre FakeGPS, rola até **MODO SLAVE**, preenche `http://<IP-do-PC>:3477` (ex: `http://192.168.0.100:3477`). Tab é opcional (preenche se o Electron tiver múltiplas abas).
+4. Clica **Testar** - deve mostrar `✓ Conectou`.
+5. Clica **Iniciar slave** - o celular agora é controlado pelo PC. Minimize, abra Chrome em `gocollect.fun`.
+6. **No PC**, use joystick/mapa/autopilot normalmente - a posição do celular acompanha.
+
+Requisitos:
+- PC e celular na **mesma rede WiFi**
+- Firewall do PC autorizando conexões no Node (porta 3477)
 
 ## Como usar o mapa (alpha4)
 

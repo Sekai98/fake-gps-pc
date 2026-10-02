@@ -2,6 +2,40 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
+## [0.2.0-alpha6] - 2026-10-02 (Android APK) - Modo slave (controle pelo Fake GPS Electron)
+
+### Added - Modo slave
+- APK pode operar como **executor remoto** controlado pelo Fake GPS Electron (PC). Fluxo:
+  1. User inicia o Fake GPS Electron no PC (server HTTP já está em `0.0.0.0:3477`)
+  2. Na MainActivity do APK, preenche **URL do Electron** (ex: `http://192.168.0.100:3477`) e opcionalmente **Tab** (ex: `tab-1`)
+  3. Toca **"Iniciar slave"** - APK passa a fazer poll a 10Hz no endpoint `/location[?tab=X]` do PC
+  4. APK aplica `lat/lon/heading/speedMps` recebidos no mock location (GPS + NETWORK providers)
+  5. Chrome mobile lê posição falsa controlada pelo PC
+- Benefícios:
+  - UX de controle do PC (mouse, mapa grande, autopilot, rotas, teleporte)
+  - Precisão alta: APK aplica EXATAMENTE o que o Electron manda (sem drift do engine local)
+  - Mesmo modo stand-alone continua funcional - novo botão não substitui o antigo
+- Botão **"Testar"** faz GET `/health` do Electron pra validar conexão antes de iniciar
+- Notificação em modo slave mostra: `SLAVE - controlado pelo PC` + URL + km/h. Se perder conexão (3s sem resposta), muda pra `SLAVE - sem conexão` com motivo
+- Em modo slave o overlay flutuante fica dim (joystick e presets desabilitados visualmente); drag handle ⋮⋮ continua funcional pra mover o overlay
+
+### Added - Internals
+- `FakeGPSService.ACTION_START_SLAVE` + extras `EXTRA_SLAVE_URL`, `EXTRA_SLAVE_TAB`
+- `slavePollLoop` roda em thread executor separado pra não bloquear o main thread com HTTP
+- `MovementEngine.heading` e `speedMps` setados direto pelo poll (bypass da física local)
+- URL/Tab persistidos em SharedPreferences entre aberturas
+
+### Files
+- EDIT `android-apk/app/src/main/java/com/fakegps/FakeGPSService.kt` (slaveMode, slavePollLoop, pollOnce, notif slave)
+- EDIT `android-apk/app/src/main/java/com/fakegps/MainActivity.kt` (card de slave: URL/Tab/testar/iniciar)
+- EDIT `android-apk/app/src/main/res/layout/activity_main.xml` (seção MODO SLAVE)
+- EDIT `android-apk/app/build.gradle` (versionCode 6, versionName 0.2.0-alpha6)
+
+### Notes
+- Precisa que PC e celular estejam na **mesma rede WiFi**.
+- Firewall do Windows pode bloquear - se "Testar" der timeout, autorizar o Node no firewall privado.
+- Pra descobrir o IP do PC: no Electron, botão "📡 Sensor remoto" mostra IP(s) da LAN. Usar a mesma, trocando porta 3443 (HTTPS do sensor) por **3477** (HTTP do /location).
+
 ## [0.2.0-alpha5] - 2026-10-02 (Android APK) - Fixes: joystick travado, mapa estático, precisão
 
 ### Fixed
