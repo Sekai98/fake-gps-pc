@@ -47,6 +47,10 @@ contextBridge.exposeInMainWorld('FakeGPSBridge', {
       try { return ipcRenderer.invoke('gocollect:cancel-scan'); }
       catch (e) { return Promise.resolve({ ok: false }); }
     },
+    fetchCratePreview: function (lat, lng) {
+      try { return ipcRenderer.invoke('gocollect:fetch-crate-preview', { lat: lat, lng: lng }); }
+      catch (e) { return Promise.resolve({ ok: false, error: 'ipc-fail' }); }
+    },
     onScanProgress: function (cb) {
       if (typeof cb !== 'function') return;
       ipcRenderer.on('gocollect:scan-progress', function (_evt, payload) {

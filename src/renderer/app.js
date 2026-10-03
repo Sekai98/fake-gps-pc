@@ -1768,10 +1768,18 @@
     const parallInput = document.getElementById('beacons-parall-input');
     const parallHint = document.getElementById('beacons-parall-hint');
     // v0.1.17: centro do scan (default = avatar, pode fixar via click no mapa)
+    // v0.1.21: persistido em localStorage
     const centerLabel = document.getElementById('beacons-center-label');
     const btnPickCenter = document.getElementById('btn-beacons-pick-center');
     const btnResetCenter = document.getElementById('btn-beacons-reset-center');
-    let scanCenter = null;  // null = usa avatar; { lat, lng } = fixado
+    const SAVED_CENTER_KEY = 'fake-gps-pc:beacons-center';
+    let scanCenter = null;
+    try {
+      const saved = JSON.parse(localStorage.getItem(SAVED_CENTER_KEY) || 'null');
+      if (saved && typeof saved.lat === 'number' && typeof saved.lng === 'number') {
+        scanCenter = saved;
+      }
+    } catch (e) {}
     // v0.1.19: filtros + crates acumulados no mapa
     const filterNormal = document.getElementById('filter-normal');
     const filterBeacon = document.getElementById('filter-beacon');
@@ -1873,6 +1881,7 @@
 
       Map.onNextClick(function (latlng) {
         scanCenter = { lat: latlng.lat, lng: latlng.lng };
+        try { localStorage.setItem(SAVED_CENTER_KEY, JSON.stringify(scanCenter)); } catch (e) {}
         try { Map.setScanCenterMarker(latlng); } catch (e) {}
         refreshCenterLabel();
         cancelPicking();
@@ -1881,6 +1890,7 @@
 
     function resetCenter() {
       scanCenter = null;
+      try { localStorage.removeItem(SAVED_CENTER_KEY); } catch (e) {}
       try { if (Map && Map.clearScanCenterMarker) Map.clearScanCenterMarker(); } catch (e) {}
       refreshCenterLabel();
     }
@@ -1888,6 +1898,10 @@
     btnPickCenter.addEventListener('click', startPickingCenter);
     btnResetCenter.addEventListener('click', resetCenter);
     refreshCenterLabel();
+    // v0.1.21: se tinha centro salvo, aplica o marker no mapa agora
+    if (scanCenter && Map && Map.setScanCenterMarker) {
+      try { Map.setScanCenterMarker({ lat: scanCenter.lat, lng: scanCenter.lng }); } catch (e) {}
+    }
 
     // --- v0.1.19: filtros persistidos + render incremental de scan ---
     const SAVED_FILTERS_KEY = 'fake-gps-pc:beacons-filters';

@@ -255,8 +255,45 @@ async function scanRegion(token, centerLat, centerLng, radiusKm, opts) {
   };
 }
 
+/**
+ * v0.1.21: investigação do endpoint /v1/crates/preview?lat=X&lng=Y
+ * Esperamos que retorne info sobre o crate mais próximo (card, tier, etc) ANTES de abrir.
+ * Chame via IPC pra testar e me manda o payload cru.
+ */
+function fetchCratePreview(token, lat, lng) {
+  return new Promise(function (resolve, reject) {
+    if (!token || typeof token !== 'string') { reject(new Error('Token Bearer ausente')); return; }
+    if (typeof lat !== 'number' || typeof lng !== 'number') { reject(new Error('lat/lng invalidos')); return; }
+    const path = '/v1/crates/preview?lat=' + encodeURIComponent(lat) + '&lng=' + encodeURIComponent(lng);
+    const req = https.request({
+      hostname: HOST,
+      port: 443,
+      path: path,
+      method: 'GET',
+      headers: {
+        'authorization': 'Bearer ' + token,
+        'origin': 'https://gocollect.fun',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) FakeGPS/0.1'
+      }
+    }, function (res) {
+      const chunks = [];
+      res.on('data', function (c) { chunks.push(c); });
+      res.on('end', function () {
+        const body = Buffer.concat(chunks).toString('utf8');
+        let parsed = null;
+        try { parsed = JSON.parse(body); } catch (e) {}
+        resolve({ status: res.statusCode, body: parsed !== null ? parsed : body });
+      });
+    });
+    req.on('error', function (e) { reject(e); });
+    req.setTimeout(10000, function () { req.destroy(new Error('Timeout 10s na chamada /v1/crates/preview')); });
+    req.end();
+  });
+}
+
 module.exports = {
   fetchCrates: fetchCrates,
+  fetchCratePreview: fetchCratePreview,
   extractNearbyLures: extractNearbyLures,
   distanceMeters: distanceMeters,
   buildScanGrid: buildScanGrid,

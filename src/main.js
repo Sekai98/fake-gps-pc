@@ -200,6 +200,21 @@ ipcMain.handle('gocollect:cancel-scan', () => {
   return { ok: true };
 });
 
+// v0.1.21: endpoint de preview (investigativo - devolve o payload cru pra inspeção)
+ipcMain.handle('gocollect:fetch-crate-preview', async (_evt, params) => {
+  const token = readGocollectToken();
+  if (!token) return { ok: false, error: 'no-token' };
+  const lat = params && typeof params.lat === 'number' ? params.lat : null;
+  const lng = params && typeof params.lng === 'number' ? params.lng : null;
+  if (lat === null || lng === null) return { ok: false, error: 'bad-coords' };
+  try {
+    const result = await GocollectAPI.fetchCratePreview(token, lat, lng);
+    return { ok: true, status: result.status, body: result.body };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
 // Hook pro server.js chamar quando a extension postar o token em /gocollect-token
 Server.setOnGocollectToken((token) => {
   if (writeGocollectToken(token) && mainWin && !mainWin.isDestroyed()) {

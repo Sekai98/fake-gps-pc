@@ -2,6 +2,38 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
+## [0.1.21] - 2026-10-03 (Electron) - Persist scanCenter + IPC investigativo /v1/crates/preview
+
+### Added
+- **`scanCenter` persistido em `localStorage`**: ao reabrir o Electron, se tinha centro de scan escolhido no mapa, ele é restaurado e o marker 🎯 reaparece. Reset ao clicar `×`.
+- **Novo endpoint investigativo**: `GocollectAPI.fetchCratePreview(token, lat, lng)` chama `GET /v1/crates/preview?lat=X&lng=Y` e devolve o payload cru (status + body) pra inspeção.
+- **IPC**: `gocollect:fetch-crate-preview` + bridge `window.FakeGPSBridge.gocollect.fetchCratePreview(lat, lng)`.
+- Essa feature é investigativa: expõe o endpoint pro console do Electron pra testar o que ele retorna (card, tier, nada). Baseado no resultado, decide-se em v0.1.22 se vale UI pra isso.
+
+### Why
+- Centro do scan era chato de refazer a cada reabertura.
+- Pergunta aberta: dá pra saber se caixa tem card dentro antes de abrir? Lures já têm `cardFound`+`card` na resposta. Crates normais não — mas talvez `/v1/crates/preview` revele. Precisamos testar.
+
+### Files
+- EDIT `src/renderer/app.js` (SAVED_CENTER_KEY, carrega marker ao init, salva no pick/reset)
+- EDIT `src/gocollect-api.js` (fetchCratePreview + export)
+- EDIT `src/main.js` (IPC fetch-crate-preview)
+- EDIT `src/preload.js` (bridge fetchCratePreview)
+- EDIT `src/renderer/index.html` (v0.1.21 no header)
+- EDIT `package.json` + `poc-extension/manifest.json` (0.1.20 → 0.1.21, simetria)
+
+### How to test the preview endpoint
+No DevTools do Electron (F12), console:
+```js
+(async () => {
+  const bridge = window.FakeGPSBridge.gocollect;
+  // Use coords de um crate conhecido (do scan recente ou lures capturados)
+  const r = await bridge.fetchCratePreview(-21.660, -42.069);
+  console.log('status:', r.status, '\npayload:', r.body);
+})();
+```
+Cola o resultado pra decidir v0.1.22.
+
 ## [0.1.20] - 2026-10-03 (Electron) - Reorganização UI: Joy+Pos unificado minimizável + beacons em 2 cards
 
 ### Changed
