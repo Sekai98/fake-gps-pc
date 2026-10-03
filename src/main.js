@@ -154,7 +154,7 @@ ipcMain.handle('gocollect:scan-region', async (_evt, params) => {
   const lng = params && typeof params.lng === 'number' ? params.lng : null;
   const radiusKm = params && typeof params.radiusKm === 'number' ? params.radiusKm : 2;
   if (lat === null || lng === null) return { ok: false, error: 'bad-coords' };
-  if (radiusKm < 2 || radiusKm > 100) return { ok: false, error: 'bad-radius' };
+  if (radiusKm < 2 || radiusKm > 500) return { ok: false, error: 'bad-radius' };
   // v0.1.16: pacing configurável pelo renderer, clamp 100-5000ms
   const pacingMs = params && typeof params.pacingMs === 'number'
     ? Math.max(100, Math.min(5000, params.pacingMs))

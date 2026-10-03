@@ -2,6 +2,26 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
+## [0.1.22.1] - 2026-10-03 (Electron) - Raio aumenta até 500km (antes 100)
+
+### Changed
+- Campo "Raio" aceita até **500km** (antes limitado em 100)
+- Clamps atualizados em `app.js` (`currentRadius`, persist localStorage, HTML `max`) e `main.js` (clamp 2-500)
+- Hint do raio ganha aviso visual:
+  - r > 100km: `⚠ muito lento`
+  - r > 250km: `⛔ impraticável`
+- Círculo preview no mapa agora reflete corretamente o novo range
+
+### Why
+- User reportou que o círculo não aumentava além de 100km. Era limite deliberado da v0.1.22 que não deixava explícito.
+- Mesmo com o aviso, 500km segue sendo impraticável pra scan completo (~87k chamadas = horas). O círculo visual ajuda a estimar área antes de disparar.
+
+### Files
+- EDIT `src/renderer/index.html` (max="500", v0.1.22.1)
+- EDIT `src/renderer/app.js` (clamp currentRadius, hint com warn, persist key)
+- EDIT `src/main.js` (clamp 500)
+- EDIT `package.json` + `poc-extension/manifest.json` (0.1.22 → 0.1.22.1, simetria)
+
 ## [0.1.22] - 2026-10-03 (Electron) - Círculo preview no mapa + scan do centro pra fora + remover lure da lista
 
 ### Added
