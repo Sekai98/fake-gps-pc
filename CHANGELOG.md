@@ -2,6 +2,25 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
+## [0.1.20] - 2026-10-03 (Electron) - Reorganização UI: Joy+Pos unificado minimizável + beacons em 2 cards
+
+### Changed
+- **Joystick + Posição** unificados num único card com título `JOYSTICK + POSICAO` e botão `▼/▶` pra minimizar/expandir. Estado persistido em `fake-gps-pc:joy-pos-collapsed`. Grid 2-colunas interno (joystick esquerda, lat/lon/head direita).
+- **Painel beacons** separado em 2 cards:
+  - **⚙ CONFIG BEACONS**: todas as configs (centro, raio, pacing, parall, filtros, botão Atualizar, status token, barra progresso)
+  - **📍 LURES ENCONTRADOS**: só a lista top 10
+- Layout footer final: `[Joy+Pos ▼] [Veloc] [Config Beacons] [Lista Lures] [Controles]`
+
+### Why
+- Joy+Pos ocupavam dois painéis mas usavam pouco espaço vertical. Unir + minimizar libera espaço pros cards de beacons/lista crescerem.
+- Separar config e lista facilita leitura (configs ficam coesas, lista fica mais alta pra ver mais lures).
+
+### Files
+- EDIT `src/renderer/index.html` (joy-pos-panel + 2 cards beacons + v0.1.20)
+- EDIT `src/renderer/styles.css` (joy-pos-grid + panel-title-collapsible + panel-collapse-btn)
+- EDIT `src/renderer/app.js` (initJoyPosToggle persist localStorage)
+- EDIT `package.json` + `poc-extension/manifest.json` (0.1.19 → 0.1.20, simetria)
+
 ## [0.1.19] - 2026-10-03 (Electron) - Scan realtime + filtros + pin click (TP/Walk) + dourado
 
 ### Added

@@ -12,7 +12,7 @@
     <div class="title">
       <span class="dot"></span>
       Fake GPS PC
-      <span class="version">v0.1.19</span>
+      <span class="version">v0.1.20</span>
     </div>
     <div class="status">
       <div class="gc-token-widget" title="Cola o Bearer token do gocollect.fun (DevTools > Network > v1/crates > Request Headers > authorization)">
@@ -356,17 +356,24 @@
   </div>
 
   <footer class="hud">
-    <div class="panel joystick-panel">
-      <div class="panel-title">JOYSTICK</div>
-      <div id="joystick-zone"></div>
-      <div class="panel-hint">ou WASD / setas</div>
-    </div>
-
-    <div class="panel info-panel">
-      <div class="panel-title">POSICAO</div>
-      <div class="row"><span class="label">Lat</span><span id="lat" class="val">-</span></div>
-      <div class="row"><span class="label">Lon</span><span id="lon" class="val">-</span></div>
-      <div class="row"><span class="label">Head</span><span id="heading" class="val">-</span></div>
+    <div class="panel joy-pos-panel" id="joy-pos-panel">
+      <div class="panel-title panel-title-collapsible">
+        <span>JOYSTICK + POSICAO</span>
+        <button id="btn-joy-pos-toggle" class="panel-collapse-btn" title="Minimizar/expandir">▼</button>
+      </div>
+      <div class="panel-body" id="joy-pos-body">
+        <div class="joy-pos-grid">
+          <div class="joy-pos-joystick">
+            <div id="joystick-zone"></div>
+            <div class="panel-hint">ou WASD / setas</div>
+          </div>
+          <div class="joy-pos-info">
+            <div class="row"><span class="label">Lat</span><span id="lat" class="val">-</span></div>
+            <div class="row"><span class="label">Lon</span><span id="lon" class="val">-</span></div>
+            <div class="row"><span class="label">Head</span><span id="heading" class="val">-</span></div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="panel speedometer-panel">
@@ -379,8 +386,8 @@
       <div class="speedo-eta" id="speedo-eta" title="Tempo estimado ate o destino da rota">⏱ --:--</div>
     </div>
 
-    <div class="panel beacons-panel">
-      <div class="panel-title">📍 BEACONS PROXIMOS</div>
+    <div class="panel beacons-config-panel">
+      <div class="panel-title">⚙ CONFIG BEACONS</div>
       <div class="beacons-header">
         <span id="beacons-token-status" class="beacons-token-status beacons-token-missing">⚠ Sem token</span>
         <button id="btn-beacons-refresh" class="beacons-refresh-btn" disabled>🔄 Atualizar</button>
@@ -425,6 +432,10 @@
         Abra <b>gocollect.fun</b> no Brave com a extension FakeGPS instalada e logue,
         ou cole o Bearer no campo do header.
       </div>
+    </div>
+
+    <div class="panel beacons-list-panel">
+      <div class="panel-title">📍 LURES ENCONTRADOS</div>
       <div id="beacons-list" class="beacons-list"></div>
     </div>
 

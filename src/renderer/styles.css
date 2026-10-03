@@ -1643,3 +1643,34 @@ body { display: flex; flex-direction: column; }
 .beacons-filter input[type="checkbox"] { cursor: pointer; }
 .color-beacon { color: #ba68c8; }
 .color-gold { color: #ffd700; }
+
+/* ===== v0.1.20: Reorganização UI ===== */
+/* Card unificado Joystick + Posição com toggle */
+.joy-pos-panel { display: flex; flex-direction: column; }
+.panel-title-collapsible {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.panel-collapse-btn {
+  background: transparent; color: #9aa0a6; border: 1px solid #3a4855;
+  padding: 1px 7px; border-radius: 3px; cursor: pointer; font-size: 11px;
+  line-height: 1;
+}
+.panel-collapse-btn:hover { background: #3a4855; color: #e8eaed; }
+.joy-pos-grid {
+  display: grid; grid-template-columns: auto 1fr; gap: 12px;
+  align-items: start;
+}
+.joy-pos-joystick { text-align: center; }
+.joy-pos-info { font-size: 12px; }
+.joy-pos-info .row { display: flex; justify-content: space-between; margin: 2px 0; }
+.joy-pos-info .label { color: #9aa0a6; margin-right: 8px; }
+.joy-pos-info .val { color: #e8eaed; font-family: monospace; font-variant-numeric: tabular-nums; }
+.joy-pos-panel.collapsed .panel-body { display: none; }
+.joy-pos-panel.collapsed .panel-collapse-btn { transform: rotate(-90deg); }
+/* 2 cards de beacons compartilham cor base */
+.beacons-config-panel, .beacons-list-panel {
+  display: flex; flex-direction: column; gap: 6px;
+}
+.beacons-list-panel .beacons-list {
+  max-height: 420px;
+}

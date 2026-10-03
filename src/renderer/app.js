@@ -1724,6 +1724,25 @@
     if (!modalTabConfig.classList.contains('hidden') && e.key === 'Escape') closeTabConfig();
   });
 
+  // ===== v0.1.20: Toggle do card Joystick+Posição =====
+  (function initJoyPosToggle() {
+    const panel = document.getElementById('joy-pos-panel');
+    const btn = document.getElementById('btn-joy-pos-toggle');
+    if (!panel || !btn) return;
+    const KEY = 'fake-gps-pc:joy-pos-collapsed';
+    function apply(collapsed) {
+      panel.classList.toggle('collapsed', collapsed);
+      btn.textContent = collapsed ? '▶' : '▼';
+      btn.title = collapsed ? 'Expandir' : 'Minimizar';
+    }
+    apply(localStorage.getItem(KEY) === '1');
+    btn.addEventListener('click', function () {
+      const nowCollapsed = !panel.classList.contains('collapsed');
+      apply(nowCollapsed);
+      localStorage.setItem(KEY, nowCollapsed ? '1' : '0');
+    });
+  })();
+
   // ===== v0.1.14: Painel de beacons do gocollect =====
   (function initBeaconsPanel() {
     const bridge = window.FakeGPSBridge && window.FakeGPSBridge.gocollect;
