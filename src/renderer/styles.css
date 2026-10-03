@@ -1623,3 +1623,23 @@ body { display: flex; flex-direction: column; }
   color: #000 !important;
   box-shadow: 0 0 10px rgba(249, 171, 0, 0.8) !important;
 }
+
+/* v0.1.19: cor dourada pra gold_rush + filtros */
+.crate-pin-gold_rush {
+  background: linear-gradient(135deg, #ffd700, #ffb300) !important;
+  color: #000 !important;
+  box-shadow: 0 0 12px rgba(255, 215, 0, 0.9) !important;
+  border: 1px solid #b8860b;
+}
+.beacons-filters-row {
+  display: flex; align-items: center; gap: 10px; font-size: 11px;
+  flex-wrap: wrap; margin-top: 2px;
+}
+.beacons-filters-label { color: #9aa0a6; }
+.beacons-filter {
+  display: inline-flex; align-items: center; gap: 4px; cursor: pointer;
+  color: #e8eaed;
+}
+.beacons-filter input[type="checkbox"] { cursor: pointer; }
+.color-beacon { color: #ba68c8; }
+.color-gold { color: #ffd700; }

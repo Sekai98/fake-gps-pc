@@ -1753,6 +1753,11 @@
     const btnPickCenter = document.getElementById('btn-beacons-pick-center');
     const btnResetCenter = document.getElementById('btn-beacons-reset-center');
     let scanCenter = null;  // null = usa avatar; { lat, lng } = fixado
+    // v0.1.19: filtros + crates acumulados no mapa
+    const filterNormal = document.getElementById('filter-normal');
+    const filterBeacon = document.getElementById('filter-beacon');
+    const filterGoldRush = document.getElementById('filter-gold-rush');
+    const scanCratesMap = {};  // dedupe de crates descobertos no scan atual (id -> crate)
     const elProgress = document.getElementById('beacons-progress');
     const elProgressFill = document.getElementById('beacons-progress-fill');
     const elProgressText = document.getElementById('beacons-progress-text');
@@ -1864,6 +1869,69 @@
     btnPickCenter.addEventListener('click', startPickingCenter);
     btnResetCenter.addEventListener('click', resetCenter);
     refreshCenterLabel();
+
+    // --- v0.1.19: filtros persistidos + render incremental de scan ---
+    const SAVED_FILTERS_KEY = 'fake-gps-pc:beacons-filters';
+    try {
+      const saved = JSON.parse(localStorage.getItem(SAVED_FILTERS_KEY) || '{}');
+      if (typeof saved.normal === 'boolean') filterNormal.checked = saved.normal;
+      if (typeof saved.beacon === 'boolean') filterBeacon.checked = saved.beacon;
+      if (typeof saved.goldRush === 'boolean') filterGoldRush.checked = saved.goldRush;
+    } catch (e) {}
+    function saveFilters() {
+      localStorage.setItem(SAVED_FILTERS_KEY, JSON.stringify({
+        normal: filterNormal.checked,
+        beacon: filterBeacon.checked,
+        goldRush: filterGoldRush.checked
+      }));
+    }
+    function filterCrate(c) {
+      const kind = c.lure && c.lure.kind;
+      if (kind === 'beacon') return filterBeacon.checked;
+      if (kind === 'gold_rush') return filterGoldRush.checked;
+      return filterNormal.checked;
+    }
+    function refreshMapCrates() {
+      if (!Map || typeof Map.renderCrates !== 'function') return;
+      const filtered = Object.values(scanCratesMap).filter(filterCrate);
+      try { Map.renderCrates(filtered); } catch (e) { console.warn('[fakegps] renderCrates err:', e); }
+    }
+    [filterNormal, filterBeacon, filterGoldRush].forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        saveFilters();
+        refreshMapCrates();
+      });
+    });
+
+    // Buffer local de lures descobertos pelo scan atual (dedupe por id)
+    const scanLuresMap = {};
+    let lastRenderThrottle = 0;
+    function throttledRenderLures() {
+      const now = Date.now();
+      if (now - lastRenderThrottle < 200) return;
+      lastRenderThrottle = now;
+      const sorted = Object.values(scanLuresMap).sort(function (a, b) {
+        return (a.distanceMeters || 0) - (b.distanceMeters || 0);
+      });
+      renderLures(sorted);
+    }
+
+    bridge.onScanLuresFound(function (newLures) {
+      if (!Array.isArray(newLures)) return;
+      newLures.forEach(function (l) { if (l && typeof l.id !== 'undefined') scanLuresMap[l.id] = l; });
+      throttledRenderLures();
+    });
+    bridge.onScanCratesFound(function (newCrates) {
+      if (!Array.isArray(newCrates)) return;
+      let changed = false;
+      newCrates.forEach(function (c) {
+        if (c && typeof c.id !== 'undefined' && !scanCratesMap[c.id]) {
+          scanCratesMap[c.id] = c;
+          changed = true;
+        }
+      });
+      if (changed) refreshMapCrates();
+    });
 
     function setTokenState(hasToken, preview) {
       if (hasToken) {
@@ -2010,6 +2078,11 @@
       setScanning(true);
       elProgressFill.style.width = '0%';
       elProgressText.textContent = '0 / ?';
+      // v0.1.19: limpa buffer do scan anterior pra render incremental começar do zero
+      Object.keys(scanLuresMap).forEach(function (k) { delete scanLuresMap[k]; });
+      Object.keys(scanCratesMap).forEach(function (k) { delete scanCratesMap[k]; });
+      renderLures([]);
+      refreshMapCrates();
 
       try {
         const result = await bridge.scanRegion(scanLat, scanLng, radiusKm, pacingMs, concurrency);

@@ -176,6 +176,16 @@ ipcMain.handle('gocollect:scan-region', async (_evt, params) => {
         mainWin.webContents.send('gocollect:scan-progress', progress);
       }
     },
+    onLuresFound: function (newLures) {
+      if (mainWin && !mainWin.isDestroyed()) {
+        mainWin.webContents.send('gocollect:scan-lures-found', newLures);
+      }
+    },
+    onCratesFound: function (newCrates) {
+      if (mainWin && !mainWin.isDestroyed()) {
+        mainWin.webContents.send('gocollect:scan-crates-found', newCrates);
+      }
+    },
     shouldCancel: function () { return localFlag.cancel; }
   });
 

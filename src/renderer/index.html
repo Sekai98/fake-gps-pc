@@ -12,7 +12,7 @@
     <div class="title">
       <span class="dot"></span>
       Fake GPS PC
-      <span class="version">v0.1.18</span>
+      <span class="version">v0.1.19</span>
     </div>
     <div class="status">
       <div class="gc-token-widget" title="Cola o Bearer token do gocollect.fun (DevTools > Network > v1/crates > Request Headers > authorization)">
@@ -410,6 +410,12 @@
         <input type="number" id="beacons-parall-input" class="beacons-radius-input" value="1" min="1" max="10" step="1" title="Quantas chamadas em paralelo - aumenta velocidade mas acumula req/s" />
         <span class="beacons-radius-unit">workers</span>
         <span id="beacons-parall-hint" class="beacons-radius-hint">(1 em paralelo)</span>
+      </div>
+      <div class="beacons-filters-row">
+        <span class="beacons-filters-label">Mapa:</span>
+        <label class="beacons-filter"><input type="checkbox" id="filter-normal" /> <span>📦 Caixas</span></label>
+        <label class="beacons-filter"><input type="checkbox" id="filter-beacon" checked /> <span class="color-beacon">🪬 Beacons</span></label>
+        <label class="beacons-filter"><input type="checkbox" id="filter-gold-rush" checked /> <span class="color-gold">💰 Gold rush</span></label>
       </div>
       <div id="beacons-progress" class="beacons-progress" style="display:none">
         <div class="beacons-progress-bar"><div id="beacons-progress-fill" class="beacons-progress-fill"></div></div>

@@ -53,6 +53,18 @@ contextBridge.exposeInMainWorld('FakeGPSBridge', {
         try { cb(payload); } catch (e) {}
       });
     },
+    onScanLuresFound: function (cb) {
+      if (typeof cb !== 'function') return;
+      ipcRenderer.on('gocollect:scan-lures-found', function (_evt, payload) {
+        try { cb(payload); } catch (e) {}
+      });
+    },
+    onScanCratesFound: function (cb) {
+      if (typeof cb !== 'function') return;
+      ipcRenderer.on('gocollect:scan-crates-found', function (_evt, payload) {
+        try { cb(payload); } catch (e) {}
+      });
+    },
     onTokenUpdated: function (cb) {
       if (typeof cb !== 'function') return;
       ipcRenderer.on('gocollect:token-updated', function (_evt, payload) {

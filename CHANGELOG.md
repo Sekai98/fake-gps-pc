@@ -2,6 +2,37 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
+## [0.1.19] - 2026-10-03 (Electron) - Scan realtime + filtros + pin click (TP/Walk) + dourado
+
+### Added
+- **Scan em tempo real**: lures e crates descobertos pelo scanRegion aparecem **conforme são encontrados**, não só no final
+  - Lista do painel re-renderiza a cada 200ms com lures ordenados por distância do centro
+  - Pins no mapa atualizados assim que novas crates/lures são descobertas
+- **Filtros checkbox no painel** (persistidos em localStorage):
+  - ☐ 📦 Caixas normais (OFF por default, pra evitar sopa de pins)
+  - ☑ 🪬 Beacons (roxo)
+  - ☑ 💰 Gold rush (dourado)
+  - Toggle instantâneo, sem re-scan
+- `GocollectAPI.scanRegion` emite `onLuresFound(newLures)` e `onCratesFound(newCrates)` incrementalmente, forwarded via IPC `gocollect:scan-lures-found` e `gocollect:scan-crates-found`
+- Bridges `onScanLuresFound`, `onScanCratesFound` no preload
+
+### Changed
+- **Cor gold_rush**: amarelo → **dourado** (`#ffd700` com glow dourado + borda `#b8860b`)
+- `scanRegion` retorna agora `{lures, crates, scanned, total, ...}` (antes só retornava lures)
+- `scan()` do app.js limpa buffers (scanLuresMap, scanCratesMap) no início do scan e re-renderiza vazio
+
+### Confirmed
+- Click nos pins de crate (coloridos ou normais) já abre popup com opções TP/Walk pelo mecanismo existente (`showActionPopup` em `map.js:130`). Mantido.
+
+### Files
+- EDIT `src/gocollect-api.js` (onLuresFound/onCratesFound incrementais, cratesMap dedupe, retorno inclui crates)
+- EDIT `src/main.js` (forwarding dos novos IPC events)
+- EDIT `src/preload.js` (bridges onScanLuresFound/onScanCratesFound)
+- EDIT `src/renderer/index.html` (checkboxes de filtro + v0.1.19)
+- EDIT `src/renderer/styles.css` (dourado gold_rush + CSS filtros)
+- EDIT `src/renderer/app.js` (listeners realtime, filtros, scanLuresMap/scanCratesMap, throttledRenderLures 200ms, saveFilters)
+- EDIT `package.json` + `poc-extension/manifest.json` (0.1.18 → 0.1.19, simetria)
+
 ## [0.1.18] - 2026-10-03 (Electron) - Cores dos pins por tipo + paralelismo configurável no scan
 
 ### Added

@@ -165,9 +165,13 @@ async function scanRegion(token, centerLat, centerLng, radiusKm, opts) {
   const onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : null;
   const shouldCancel = typeof opts.shouldCancel === 'function' ? opts.shouldCancel : null;
 
+  const onLuresFound = typeof opts.onLuresFound === 'function' ? opts.onLuresFound : null;
+  const onCratesFound = typeof opts.onCratesFound === 'function' ? opts.onCratesFound : null;
+
   const points = buildScanGrid(centerLat, centerLng, radiusKm, stepKm);
   const total = points.length;
-  const luresMap = {};  // dedupe por id - acesso compartilhado entre workers mas JS é single-thread
+  const luresMap = {};  // dedupe por id
+  const cratesMap = {}; // dedupe por id (crates normais e de lure)
   let scanned = 0;
   let errors = 0;
   let cancelled = false;
@@ -178,6 +182,7 @@ async function scanRegion(token, centerLat, centerLng, radiusKm, opts) {
     if (onProgress) onProgress({
       scanned: scanned, total: total,
       lureCount: Object.keys(luresMap).length,
+      crateCount: Object.keys(cratesMap).length,
       aborted: abortedReason
     });
   }
@@ -191,15 +196,38 @@ async function scanRegion(token, centerLat, centerLng, radiusKm, opts) {
       const pt = points[idx];
       try {
         const data = await fetchCrates(token, pt.lat, pt.lng);
-        if (data && Array.isArray(data.lures)) {
-          data.lures.forEach(function (l) {
-            if (!l || typeof l.id === 'undefined') return;
-            if (!luresMap[l.id]) {
-              luresMap[l.id] = Object.assign({}, l, {
-                distanceMeters: distanceMeters(centerLat, centerLng, l.lat, l.lng)
-              });
-            }
-          });
+        if (data) {
+          // Lures (novos)
+          const newLures = [];
+          if (Array.isArray(data.lures)) {
+            data.lures.forEach(function (l) {
+              if (!l || typeof l.id === 'undefined') return;
+              if (!luresMap[l.id]) {
+                const enriched = Object.assign({}, l, {
+                  distanceMeters: distanceMeters(centerLat, centerLng, l.lat, l.lng)
+                });
+                luresMap[l.id] = enriched;
+                newLures.push(enriched);
+              }
+            });
+          }
+          // Crates (novos)
+          const newCrates = [];
+          if (Array.isArray(data.crates)) {
+            data.crates.forEach(function (c) {
+              if (!c || typeof c.id === 'undefined') return;
+              if (!cratesMap[c.id]) {
+                // Normaliza lng/lon porque o resto do app usa .lon
+                const enriched = Object.assign({}, c, {
+                  lon: typeof c.lon === 'number' ? c.lon : c.lng
+                });
+                cratesMap[c.id] = enriched;
+                newCrates.push(enriched);
+              }
+            });
+          }
+          if (newLures.length && onLuresFound) onLuresFound(newLures);
+          if (newCrates.length && onCratesFound) onCratesFound(newCrates);
         }
       } catch (e) {
         errors++;
@@ -210,8 +238,6 @@ async function scanRegion(token, centerLat, centerLng, radiusKm, opts) {
       }
       scanned++;
       reportProgress();
-      // Pacing por worker: espera antes de pegar o próximo ponto desse mesmo worker.
-      // Com N workers, a taxa agregada ≈ N / (pacingMs/1000).
       if (nextIdx < points.length && !abortedReason && !cancelled) {
         await sleep(pacingMs);
       }
@@ -224,6 +250,7 @@ async function scanRegion(token, centerLat, centerLng, radiusKm, opts) {
 
   return {
     lures: Object.values(luresMap).sort(function (a, b) { return a.distanceMeters - b.distanceMeters; }),
+    crates: Object.values(cratesMap),
     scanned: scanned, total: total, cancelled: cancelled, errors: errors, aborted: abortedReason
   };
 }
