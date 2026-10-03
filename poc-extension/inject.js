@@ -288,10 +288,13 @@
 
   if (nativeFetch) {
     window.fetch = async function (input, init) {
-      // Captura token Bearer em requests pra gocollect.fun (antes do fetch nativo)
+      // Captura token Bearer em requests pra gocollect.fun (antes do fetch nativo).
+      // Resolve URL relativa (ex: '/v1/crates') contra location.href pra pegar o host atual.
       try {
         const url = requestUrl(input);
-        if (url && url.indexOf('gocollect.fun') !== -1) {
+        let fullUrl = '';
+        try { fullUrl = new URL(url || '', location.href).href; } catch (e) {}
+        if (fullUrl.indexOf('gocollect.fun') !== -1) {
           const token = extractBearerFromInit(input, init);
           if (token && token !== lastCapturedToken) {
             lastCapturedToken = token;
