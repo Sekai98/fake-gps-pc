@@ -161,6 +161,25 @@
       if (scanCenterMarker) { try { map.removeLayer(scanCenterMarker); } catch (e) {} scanCenterMarker = null; }
     }
 
+    // v0.1.22: círculo preview da área de busca do scan de beacons
+    let scanAreaCircle = null;
+    function setScanAreaCircle(latlng, radiusMeters) {
+      clearScanAreaCircle();
+      if (!latlng || typeof radiusMeters !== 'number' || radiusMeters <= 0) return;
+      scanAreaCircle = L.circle([latlng.lat, latlng.lng], {
+        radius: radiusMeters,
+        color: '#f9ab00',
+        weight: 2,
+        opacity: 0.8,
+        fillColor: '#f9ab00',
+        fillOpacity: 0.08,
+        interactive: false
+      }).addTo(map);
+    }
+    function clearScanAreaCircle() {
+      if (scanAreaCircle) { try { map.removeLayer(scanAreaCircle); } catch (e) {} scanAreaCircle = null; }
+    }
+
     // --- Polyline de rota ---
     let routeLayer = null;
     let destMarker = null;
@@ -369,6 +388,8 @@
       onNextClick: onNextClick,
       setScanCenterMarker: setScanCenterMarker,
       clearScanCenterMarker: clearScanCenterMarker,
+      setScanAreaCircle: setScanAreaCircle,
+      clearScanAreaCircle: clearScanAreaCircle,
       destroy: destroy
     };
   }

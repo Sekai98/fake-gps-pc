@@ -2,6 +2,33 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
+## [0.1.22] - 2026-10-03 (Electron) - Círculo preview no mapa + scan do centro pra fora + remover lure da lista
+
+### Added
+- **Círculo preview da área de busca no mapa**: círculo amarelo semi-transparente ao redor do centro do scan (fixado via 🎯 ou do avatar como fallback). Raio = valor do campo "Raio". Atualiza em tempo real quando user muda o raio ou troca o centro. Segue o avatar com poll de 2s quando `scanCenter` é null.
+- **Scan em "espiral" (do centro pra fora)**: `buildScanGrid` agora ordena os pontos por distância do centro antes de retornar. Workers processam do mais próximo pro mais distante. Benefícios:
+  - Lures próximos aparecem primeiro
+  - Se cancelar antes do fim, resultados perto do centro já apareceram
+  - UX melhor que "varrer de baixo pra cima" de antes
+- **Botão × em cada lure da lista** pra remover sem fechar o Electron. Clica → remove do `scanLuresMap` → re-renderiza a lista sem o item. No próximo scan, se o lure ainda estiver ativo no backend, aparece de novo.
+
+### Internal
+- `src/renderer/map.js`: `setScanAreaCircle(latlng, radiusMeters)` + `clearScanAreaCircle()` + exports
+- `src/renderer/app.js`: `syncScanAreaCircle()` chamada em `updateHints`/pick/reset + `setInterval(2s)` quando `scanCenter` null
+- `src/gocollect-api.js`: `buildScanGrid` guarda `_d` por ponto e ordena ascendente
+- `beacon-btn-remove` adicionado ao `renderLures` + handler no listener de click do `elList`
+
+### Investigation note
+- Testamos `/v1/crates/preview` (via IPC adicionado em v0.1.21): endpoint retorna basicamente o mesmo payload de `/v1/crates` mas sem `openedByMe` e sem `lures[]`. **Não revela qual card está dentro da caixa normal.** Pra crates normais, continua sem jeito de saber o card antes de abrir. Pra lures (beacon/gold_rush) a info `cardFound`/`card` já aparece no `/v1/crates`. Decisão: `/v1/crates/preview` não ganha UI (feature não vale).
+
+### Files
+- EDIT `src/renderer/map.js` (scan area circle)
+- EDIT `src/renderer/app.js` (sync circle + botão remover + wire)
+- EDIT `src/gocollect-api.js` (grid ordenado por distância)
+- EDIT `src/renderer/styles.css` (beacon-btn-remove)
+- EDIT `src/renderer/index.html` (v0.1.22)
+- EDIT `package.json` + `poc-extension/manifest.json` (0.1.21 → 0.1.22, simetria)
+
 ## [0.1.21] - 2026-10-03 (Electron) - Persist scanCenter + IPC investigativo /v1/crates/preview
 
 ### Added

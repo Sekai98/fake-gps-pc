@@ -132,15 +132,17 @@ function buildScanGrid(centerLat, centerLng, radiusKm, stepKm) {
   const spanLng = radiusKm * lngDegPerKm;
   const points = [];
   // Inclui centro
-  points.push({ lat: centerLat, lng: centerLng });
+  points.push({ lat: centerLat, lng: centerLng, _d: 0 });
   for (let dLat = -spanLat; dLat <= spanLat + 1e-9; dLat += stepLat) {
     for (let dLng = -spanLng; dLng <= spanLng + 1e-9; dLng += stepLng) {
       if (dLat === 0 && dLng === 0) continue;
       const pt = { lat: centerLat + dLat, lng: centerLng + dLng };
       const dist = distanceMeters(centerLat, centerLng, pt.lat, pt.lng);
-      if (dist <= radiusKm * 1000) points.push(pt);
+      if (dist <= radiusKm * 1000) { pt._d = dist; points.push(pt); }
     }
   }
+  // v0.1.22: scan em "espiral" - ordena do centro pra fora
+  points.sort(function (a, b) { return a._d - b._d; });
   return points;
 }
 

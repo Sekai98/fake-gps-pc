@@ -1674,3 +1674,11 @@ body { display: flex; flex-direction: column; }
 .beacons-list-panel .beacons-list {
   max-height: 420px;
 }
+
+/* v0.1.22: botão remover lure da lista */
+.beacon-btn-remove {
+  background: transparent; color: #9aa0a6; border: 1px solid #3a4855;
+  padding: 0 6px; border-radius: 3px; cursor: pointer; font-size: 13px; line-height: 1.4;
+  margin-left: 4px;
+}
+.beacon-btn-remove:hover { background: #c62828; color: #fff; border-color: #c62828; }

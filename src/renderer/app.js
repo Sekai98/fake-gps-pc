@@ -1829,6 +1829,25 @@
       pacingHint.className = 'beacons-radius-hint beacons-pacing-risk-' + risk;
       pacingHint.textContent = icon + ' ' + reqPerSec.toFixed(1) + ' req/s · ' + fmtSeconds(totalSec);
       parallHint.textContent = '(' + n + ' em paralelo)';
+
+      syncScanAreaCircle();
+    }
+
+    // v0.1.22: círculo preview no mapa (área de busca do próximo scan)
+    const MapRef = global.FakeGPS && global.FakeGPS.Map;
+    function syncScanAreaCircle() {
+      if (!MapRef || typeof MapRef.setScanAreaCircle !== 'function') return;
+      const r = currentRadius();
+      let lat, lng;
+      if (scanCenter) {
+        lat = scanCenter.lat; lng = scanCenter.lng;
+      } else {
+        const Mov = global.FakeGPS && global.FakeGPS.Movement;
+        if (!Mov) return;
+        const snap = Mov.getRaw();
+        lat = snap.lat; lng = snap.lon;
+      }
+      try { MapRef.setScanAreaCircle({ lat: lat, lng: lng }, r * 1000); } catch (e) {}
     }
 
     radiusInput.addEventListener('input', function () {
@@ -1884,6 +1903,7 @@
         try { localStorage.setItem(SAVED_CENTER_KEY, JSON.stringify(scanCenter)); } catch (e) {}
         try { Map.setScanCenterMarker(latlng); } catch (e) {}
         refreshCenterLabel();
+        syncScanAreaCircle();
         cancelPicking();
       });
     }
@@ -1893,6 +1913,7 @@
       try { localStorage.removeItem(SAVED_CENTER_KEY); } catch (e) {}
       try { if (Map && Map.clearScanCenterMarker) Map.clearScanCenterMarker(); } catch (e) {}
       refreshCenterLabel();
+      syncScanAreaCircle();
     }
 
     btnPickCenter.addEventListener('click', startPickingCenter);
@@ -1902,6 +1923,11 @@
     if (scanCenter && Map && Map.setScanCenterMarker) {
       try { Map.setScanCenterMarker({ lat: scanCenter.lat, lng: scanCenter.lng }); } catch (e) {}
     }
+    // v0.1.22: círculo inicial + follow do avatar quando scanCenter é null (poll 2s)
+    syncScanAreaCircle();
+    setInterval(function () {
+      if (!scanCenter) syncScanAreaCircle();
+    }, 2000);
 
     // --- v0.1.19: filtros persistidos + render incremental de scan ---
     const SAVED_FILTERS_KEY = 'fake-gps-pc:beacons-filters';
@@ -2057,6 +2083,7 @@
           '<div class="beacon-item-head">'
           + '<span class="beacon-kind ' + kindClass + '">#' + l.id + ' ' + kindLabel + '</span>'
           + '<span class="beacon-distance">' + fmtDistance(l.distanceMeters) + '</span>'
+          + '<button class="beacon-btn-remove" data-idx="' + idx + '" title="Remove da lista (pra aparecer de novo no próximo scan)">×</button>'
           + '</div>'
           + cardHtml
           + '<div class="beacon-meta">⏱ expira em ' + fmtRemaining(l.endsAt)
@@ -2168,6 +2195,15 @@
       const idx = parseInt(btn.getAttribute('data-idx'), 10);
       const lure = currentLures[idx];
       if (!lure) return;
+      // v0.1.22: botão × remove o lure da lista local pra ele poder ser achado de novo no próximo scan
+      if (btn.classList.contains('beacon-btn-remove')) {
+        if (typeof lure.id !== 'undefined') delete scanLuresMap[lure.id];
+        const remaining = Object.values(scanLuresMap).sort(function (a, b) {
+          return (a.distanceMeters || 0) - (b.distanceMeters || 0);
+        });
+        renderLures(remaining);
+        return;
+      }
       const Movement = global.FakeGPS && global.FakeGPS.Movement;
       const AutoPilot = global.FakeGPS && global.FakeGPS.AutoPilot;
       if (!Movement) return;
