@@ -130,6 +130,21 @@ ipcMain.handle('gocollect:clear-token', () => {
   return { ok: true };
 });
 
+ipcMain.handle('gocollect:save-token', (_evt, token) => {
+  if (typeof token !== 'string' || token.trim().length < 10) {
+    return { ok: false, error: 'token-invalido' };
+  }
+  const clean = token.trim();
+  const saved = writeGocollectToken(clean);
+  if (saved && mainWin && !mainWin.isDestroyed()) {
+    mainWin.webContents.send('gocollect:token-updated', {
+      hasToken: true,
+      tokenPreview: clean.slice(0, 6) + '...' + clean.slice(-4)
+    });
+  }
+  return { ok: saved };
+});
+
 // Hook pro server.js chamar quando a extension postar o token em /gocollect-token
 Server.setOnGocollectToken((token) => {
   if (writeGocollectToken(token) && mainWin && !mainWin.isDestroyed()) {

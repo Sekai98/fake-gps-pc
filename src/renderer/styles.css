@@ -1526,3 +1526,30 @@ body { display: flex; flex-direction: column; }
 .beacon-btn-walk { background: #0f9d58; color: #fff; }
 .beacon-btn-walk:hover { background: #4caf50; }
 .beacons-list-empty { font-size: 11px; color: #777; text-align: center; padding: 10px; }
+
+/* ===== v0.1.14.2: Widget de token gocollect no header ===== */
+.gc-token-widget {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 8px; margin-right: 10px;
+  background: #1a2029; border: 1px solid #2a3744; border-radius: 4px;
+  font-size: 12px;
+}
+.gc-token-badge {
+  display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+  flex-shrink: 0;
+}
+.gc-token-badge-ok { background: #0f9d58; box-shadow: 0 0 6px #0f9d58; }
+.gc-token-badge-off { background: #e53935; box-shadow: 0 0 4px #e53935; }
+.gc-token-label { color: #9aa0a6; }
+.gc-token-input {
+  background: #0f1419; border: 1px solid #2a3744; color: #e8eaed;
+  padding: 2px 6px; border-radius: 3px; font-size: 11px;
+  width: 160px; font-family: monospace;
+}
+.gc-token-input:focus { outline: none; border-color: #4285f4; }
+.gc-token-save-btn {
+  background: #4285f4; color: #fff; border: none;
+  padding: 3px 8px; border-radius: 3px; cursor: pointer; font-size: 11px;
+}
+.gc-token-save-btn:hover { background: #5a95f5; }
+.gc-token-save-btn:disabled { opacity: 0.5; cursor: not-allowed; }

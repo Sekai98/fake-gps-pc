@@ -12,9 +12,15 @@
     <div class="title">
       <span class="dot"></span>
       Fake GPS PC
-      <span class="version">v0.1.14</span>
+      <span class="version">v0.1.14.2</span>
     </div>
     <div class="status">
+      <div class="gc-token-widget" title="Cola o Bearer token do gocollect.fun (DevTools > Network > v1/crates > Request Headers > authorization)">
+        <span class="gc-token-badge gc-token-badge-off" id="gc-token-badge" title="Status do token"></span>
+        <span class="gc-token-label">Token:</span>
+        <input type="password" id="gc-token-input" class="gc-token-input" placeholder="Cola o Bearer aqui..." autocomplete="off" />
+        <button id="gc-token-save" class="gc-token-save-btn">Salvar</button>
+      </div>
       <button id="header-remote-sensor" class="header-remote-sensor" title="Sensor remoto (celular via WiFi)">
         <span class="rs-icon">📡</span>
         <span class="rs-label">Sensor:</span>

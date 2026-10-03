@@ -2,6 +2,31 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
+## [0.1.14.2] - 2026-10-03 (Electron) - Campo de token manual no header + badge visual + remove check firewall
+
+### Added
+- **Widget de token no header do app**: campo `<input type="password">` + botão "Salvar" + badge visual circular
+  - Badge **verde** (●) quando token está salvo
+  - Badge **vermelho** (●) quando sem token
+  - Tooltip mostra preview do token quando ativo
+  - Enter no campo também salva
+  - Remove automaticamente prefixo "Bearer " se o user colar com ele
+- Novo IPC `gocollect:save-token` + bridge `window.FakeGPSBridge.gocollect.saveToken(token)`
+
+### Removed
+- Bloco de check de firewall do `iniciar.bat` (perguntava S/N toda vez porque a regra "FakeGPS 3477" não existe mais - usuário decidiu não usar WiFi do APK)
+- Arquivo `autorizar-firewall.ps1` deletado
+
+### Files
+- EDIT `iniciar.bat` (remove bloco firewall, mantém IPs LAN info)
+- DELETE `autorizar-firewall.ps1`
+- EDIT `src/main.js` (IPC gocollect:save-token)
+- EDIT `src/preload.js` (bridge saveToken)
+- EDIT `src/renderer/index.html` (widget no header + bump versão visível 0.1.14.2)
+- EDIT `src/renderer/styles.css` (CSS do widget + badge)
+- EDIT `src/renderer/app.js` (wire headerSave + headerBadge no initBeaconsPanel)
+- EDIT `package.json` + `poc-extension/manifest.json` (bump 0.1.14.1 → 0.1.14.2, simetria)
+
 ## [0.1.14.1] - 2026-10-03 (Extension) - Hotfix: resolver URL relativa pra capturar Bearer
 
 ### Fixed

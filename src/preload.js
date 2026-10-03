@@ -35,6 +35,10 @@ contextBridge.exposeInMainWorld('FakeGPSBridge', {
       try { return ipcRenderer.invoke('gocollect:clear-token'); }
       catch (e) { return Promise.resolve({ ok: false }); }
     },
+    saveToken: function (token) {
+      try { return ipcRenderer.invoke('gocollect:save-token', token); }
+      catch (e) { return Promise.resolve({ ok: false }); }
+    },
     onTokenUpdated: function (cb) {
       if (typeof cb !== 'function') return;
       ipcRenderer.on('gocollect:token-updated', function (_evt, payload) {

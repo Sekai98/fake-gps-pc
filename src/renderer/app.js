@@ -1734,6 +1734,10 @@
     const btnClear = document.getElementById('btn-beacons-clear-token');
     const elHint = document.getElementById('beacons-hint');
     const elList = document.getElementById('beacons-list');
+    // v0.1.14.2: widget do header (cola manual + badge visual)
+    const headerBadge = document.getElementById('gc-token-badge');
+    const headerInput = document.getElementById('gc-token-input');
+    const headerSave = document.getElementById('gc-token-save');
     let currentLures = [];
 
     function setTokenState(hasToken, preview) {
@@ -1744,6 +1748,11 @@
         btnRefresh.disabled = false;
         btnClear.style.display = '';
         elHint.style.display = 'none';
+        if (headerBadge) {
+          headerBadge.classList.remove('gc-token-badge-off');
+          headerBadge.classList.add('gc-token-badge-ok');
+          headerBadge.title = 'Token ativo (' + (preview || '...') + ')';
+        }
       } else {
         elStatus.textContent = '⚠ Sem token';
         elStatus.classList.remove('beacons-token-ok');
@@ -1752,7 +1761,41 @@
         btnClear.style.display = 'none';
         elHint.style.display = '';
         elList.innerHTML = '';
+        if (headerBadge) {
+          headerBadge.classList.remove('gc-token-badge-ok');
+          headerBadge.classList.add('gc-token-badge-off');
+          headerBadge.title = 'Sem token - cole o Bearer no campo ao lado';
+        }
       }
+    }
+
+    // v0.1.14.2: botão Salvar do widget do header
+    if (headerSave && headerInput) {
+      headerSave.addEventListener('click', async function () {
+        const raw = (headerInput.value || '').trim();
+        if (!raw) { alert('Cole o token antes'); return; }
+        // Remove "Bearer " se o user colou com o prefixo
+        const clean = raw.replace(/^Bearer\s+/i, '');
+        headerSave.disabled = true;
+        headerSave.textContent = '...';
+        try {
+          const result = await bridge.saveToken(clean);
+          if (result && result.ok) {
+            headerInput.value = '';
+            // onTokenUpdated vai disparar e atualizar badge
+          } else {
+            alert('Falha ao salvar: ' + (result && result.error || 'erro desconhecido'));
+          }
+        } catch (e) {
+          alert('Erro: ' + e.message);
+        } finally {
+          headerSave.disabled = false;
+          headerSave.textContent = 'Salvar';
+        }
+      });
+      headerInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); headerSave.click(); }
+      });
     }
 
     function fmtDistance(m) {
