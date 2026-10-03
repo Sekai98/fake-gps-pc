@@ -1745,6 +1745,9 @@
     // v0.1.16: pacing configurável
     const pacingInput = document.getElementById('beacons-pacing-input');
     const pacingHint = document.getElementById('beacons-pacing-hint');
+    // v0.1.18: paralelismo configurável
+    const parallInput = document.getElementById('beacons-parall-input');
+    const parallHint = document.getElementById('beacons-parall-hint');
     // v0.1.17: centro do scan (default = avatar, pode fixar via click no mapa)
     const centerLabel = document.getElementById('beacons-center-label');
     const btnPickCenter = document.getElementById('btn-beacons-pick-center');
@@ -1757,6 +1760,7 @@
 
     const SAVED_RADIUS_KEY = 'fake-gps-pc:beacons-radius-km';
     const SAVED_PACING_KEY = 'fake-gps-pc:beacons-pacing-ms';
+    const SAVED_PARALL_KEY = 'fake-gps-pc:beacons-parall';
 
     const savedRadius = parseInt(localStorage.getItem(SAVED_RADIUS_KEY), 10);
     if (savedRadius >= 2 && savedRadius <= 100) radiusInput.value = savedRadius;
@@ -1764,8 +1768,12 @@
     const savedPacing = parseInt(localStorage.getItem(SAVED_PACING_KEY), 10);
     if (savedPacing >= 100 && savedPacing <= 5000) pacingInput.value = savedPacing;
 
+    const savedParall = parseInt(localStorage.getItem(SAVED_PARALL_KEY), 10);
+    if (savedParall >= 1 && savedParall <= 10) parallInput.value = savedParall;
+
     function currentRadius() { return Math.max(2, Math.min(100, parseInt(radiusInput.value, 10) || 30)); }
     function currentPacing() { return Math.max(100, Math.min(5000, parseInt(pacingInput.value, 10) || 600)); }
+    function currentParall() { return Math.max(1, Math.min(10, parseInt(parallInput.value, 10) || 1)); }
     function estimatedCalls(r) { return Math.max(1, Math.round(Math.PI * r * r / 9)); }
     function fmtSeconds(s) {
       if (s < 60) return '~' + s + 's';
@@ -1776,17 +1784,19 @@
     function updateHints() {
       const r = currentRadius();
       const p = currentPacing();
+      const n = currentParall();
       const calls = estimatedCalls(r);
       radiusHint.textContent = '(~' + calls + ' chamadas)';
 
-      // Risco baseado em req/s
-      const reqPerSec = 1000 / p;
-      const totalSec = Math.round(calls * p / 1000);
+      // Taxa total agregada = N workers / (pacing/1000)
+      const reqPerSec = n * (1000 / p);
+      const totalSec = Math.round((calls / n) * p / 1000);
       let risk = 'low', icon = '🟢';
-      if (p < 300) { risk = 'high'; icon = '🔴'; }
-      else if (p < 500) { risk = 'med'; icon = '🟡'; }
+      if (reqPerSec > 5) { risk = 'high'; icon = '🔴'; }
+      else if (reqPerSec > 2) { risk = 'med'; icon = '🟡'; }
       pacingHint.className = 'beacons-radius-hint beacons-pacing-risk-' + risk;
       pacingHint.textContent = icon + ' ' + reqPerSec.toFixed(1) + ' req/s · ' + fmtSeconds(totalSec);
+      parallHint.textContent = '(' + n + ' em paralelo)';
     }
 
     radiusInput.addEventListener('input', function () {
@@ -1798,6 +1808,11 @@
       updateHints();
       const p = parseInt(pacingInput.value, 10);
       if (p >= 100 && p <= 5000) localStorage.setItem(SAVED_PACING_KEY, String(p));
+    });
+    parallInput.addEventListener('input', function () {
+      updateHints();
+      const n = parseInt(parallInput.value, 10);
+      if (n >= 1 && n <= 10) localStorage.setItem(SAVED_PARALL_KEY, String(n));
     });
     updateHints();
 
@@ -1990,13 +2005,14 @@
       }
       const radiusKm = currentRadius();
       const pacingMs = currentPacing();
+      const concurrency = currentParall();
 
       setScanning(true);
       elProgressFill.style.width = '0%';
       elProgressText.textContent = '0 / ?';
 
       try {
-        const result = await bridge.scanRegion(scanLat, scanLng, radiusKm, pacingMs);
+        const result = await bridge.scanRegion(scanLat, scanLng, radiusKm, pacingMs, concurrency);
         if (!result.ok) {
           if (result.error === 'unauthorized') {
             setTokenState(false);

@@ -149,63 +149,82 @@ function sleep(ms) {
 }
 
 /**
- * Varre grid de pontos chamando fetchCrates em cada um, com pacing e dedupe.
+ * Varre grid de pontos chamando fetchCrates em cada um, com pacing + dedupe + paralelismo opcional.
  * @param {string} token - Bearer
  * @param {number} centerLat
  * @param {number} centerLng
  * @param {number} radiusKm - raio em km (2-100)
- * @param {object} opts - { pacingMs=600, stepKm=3, onProgress(progress), shouldCancel() }
- * @returns {Promise<{lures: [], scanned: n, total: n, cancelled: bool, errors: n}>}
+ * @param {object} opts - { pacingMs=600, stepKm=3, concurrency=1, onProgress(progress), shouldCancel() }
+ * @returns {Promise<{lures: [], scanned: n, total: n, cancelled: bool, errors: n, aborted?: string}>}
  */
 async function scanRegion(token, centerLat, centerLng, radiusKm, opts) {
   opts = opts || {};
   const pacingMs = typeof opts.pacingMs === 'number' ? opts.pacingMs : 600;
   const stepKm = typeof opts.stepKm === 'number' ? opts.stepKm : 3;
+  const concurrency = Math.max(1, Math.min(10, typeof opts.concurrency === 'number' ? opts.concurrency : 1));
   const onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : null;
   const shouldCancel = typeof opts.shouldCancel === 'function' ? opts.shouldCancel : null;
 
   const points = buildScanGrid(centerLat, centerLng, radiusKm, stepKm);
   const total = points.length;
-  const luresMap = {};  // dedupe por id
+  const luresMap = {};  // dedupe por id - acesso compartilhado entre workers mas JS é single-thread
   let scanned = 0;
   let errors = 0;
   let cancelled = false;
+  let abortedReason = null;
+  let nextIdx = 0;
 
-  for (let i = 0; i < points.length; i++) {
-    if (shouldCancel && shouldCancel()) { cancelled = true; break; }
-    const pt = points[i];
-    try {
-      const data = await fetchCrates(token, pt.lat, pt.lng);
-      if (data && Array.isArray(data.lures)) {
-        data.lures.forEach(function (l) {
-          if (!l || typeof l.id === 'undefined') return;
-          // Dedupe: mantem o primeiro encontrado
-          if (!luresMap[l.id]) {
-            luresMap[l.id] = Object.assign({}, l, {
-              distanceMeters: distanceMeters(centerLat, centerLng, l.lat, l.lng)
-            });
-          }
-        });
+  function reportProgress() {
+    if (onProgress) onProgress({
+      scanned: scanned, total: total,
+      lureCount: Object.keys(luresMap).length,
+      aborted: abortedReason
+    });
+  }
+
+  async function worker() {
+    while (true) {
+      if (abortedReason || cancelled) break;
+      if (shouldCancel && shouldCancel()) { cancelled = true; break; }
+      const idx = nextIdx++;
+      if (idx >= points.length) break;
+      const pt = points[idx];
+      try {
+        const data = await fetchCrates(token, pt.lat, pt.lng);
+        if (data && Array.isArray(data.lures)) {
+          data.lures.forEach(function (l) {
+            if (!l || typeof l.id === 'undefined') return;
+            if (!luresMap[l.id]) {
+              luresMap[l.id] = Object.assign({}, l, {
+                distanceMeters: distanceMeters(centerLat, centerLng, l.lat, l.lng)
+              });
+            }
+          });
+        }
+      } catch (e) {
+        errors++;
+        if (e.status === 401) {
+          abortedReason = 'unauthorized';
+          break;
+        }
       }
-    } catch (e) {
-      errors++;
-      // 401 = token invalido, aborta todo o scan
-      if (e.status === 401) {
-        if (onProgress) onProgress({ scanned: scanned, total: total, lureCount: Object.keys(luresMap).length, aborted: 'unauthorized' });
-        return {
-          lures: Object.values(luresMap).sort(function (a, b) { return a.distanceMeters - b.distanceMeters; }),
-          scanned: scanned, total: total, cancelled: false, errors: errors, aborted: 'unauthorized'
-        };
+      scanned++;
+      reportProgress();
+      // Pacing por worker: espera antes de pegar o próximo ponto desse mesmo worker.
+      // Com N workers, a taxa agregada ≈ N / (pacingMs/1000).
+      if (nextIdx < points.length && !abortedReason && !cancelled) {
+        await sleep(pacingMs);
       }
     }
-    scanned++;
-    if (onProgress) onProgress({ scanned: scanned, total: total, lureCount: Object.keys(luresMap).length });
-    if (i < points.length - 1) await sleep(pacingMs);
   }
+
+  const workers = [];
+  for (let i = 0; i < concurrency; i++) workers.push(worker());
+  await Promise.all(workers);
 
   return {
     lures: Object.values(luresMap).sort(function (a, b) { return a.distanceMeters - b.distanceMeters; }),
-    scanned: scanned, total: total, cancelled: cancelled, errors: errors
+    scanned: scanned, total: total, cancelled: cancelled, errors: errors, aborted: abortedReason
   };
 }
 

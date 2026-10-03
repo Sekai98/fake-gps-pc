@@ -211,9 +211,15 @@
       const classNames = ['crate-marker'];
       if (crate.openedByMe) classNames.push('crate-opened');
       if (inRoute) classNames.push('crate-in-route');
+      // v0.1.18: cores por tipo de lure
+      const kind = crate.lure && crate.lure.kind;
+      const pinClasses = ['crate-pin'];
+      if (inRoute) pinClasses.push('crate-pin-numbered');
+      if (kind === 'beacon') pinClasses.push('crate-pin-beacon');
+      else if (kind === 'gold_rush') pinClasses.push('crate-pin-gold_rush');
       const content = inRoute
-        ? '<div class="crate-pin crate-pin-numbered">' + (routeIndex + 1) + '</div>'
-        : '<div class="crate-pin">📦</div>';
+        ? '<div class="' + pinClasses.join(' ') + '">' + (routeIndex + 1) + '</div>'
+        : '<div class="' + pinClasses.join(' ') + '">📦</div>';
       return L.divIcon({
         className: classNames.join(' '),
         html: content,

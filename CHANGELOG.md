@@ -2,6 +2,44 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
+## [0.1.18] - 2026-10-03 (Electron) - Cores dos pins por tipo + paralelismo configurável no scan
+
+### Added
+- **Cores das caixas no mapa por tipo** (resposta ao `crate.lure.kind`):
+  - **Beacon** → roxo com glow (`#9c27b0`)
+  - **Gold rush** → amarelo com glow (`#f9ab00`)
+  - Normal (sem lure) → cinza padrão
+- **Paralelismo configurável** no scan regional:
+  - Campo "Parall: X workers" no painel (1-10, default 1)
+  - Pool com fila FIFO: workers puxam o próximo ponto da fila conforme ficam livres
+  - Pacing é POR WORKER (não total) - taxa agregada = N workers / (pacing/1000)
+  - Persistido em localStorage (`fake-gps-pc:beacons-parall`)
+
+### Changed
+- Hint do pacing agora mostra **taxa agregada** considerando paralelismo:
+  - Pacing 600ms + 1 worker = 1.6 req/s · ~3min (igual antes)
+  - Pacing 600ms + 5 workers = 8.3 req/s · ~38s (muito mais rápido mas 🔴)
+  - Pacing 1000ms + 3 workers = 3.0 req/s · ~1min45s (meio-termo 🟡)
+- Faixas de risco revisadas baseadas em taxa total:
+  - ≤ 2 req/s: 🟢 Seguro
+  - 2-5 req/s: 🟡 Médio
+  - \> 5 req/s: 🔴 Alto risco de rate limit
+
+### Internal
+- `GocollectAPI.scanRegion` agora aceita `opts.concurrency` (clamp 1-10) e usa pool com `Promise.all` de N workers. Ponto comum atomico via `nextIdx++` (JS single-thread garante). `luresMap` compartilhado é seguro (dedupe por id).
+- `main.js` faz clamp 1-10 em `params.concurrency` antes de passar
+- `preload.js` bridge aceita 5º arg `concurrency`
+
+### Files
+- EDIT `src/renderer/map.js` (cratesIcon adiciona crate-pin-beacon/crate-pin-gold_rush)
+- EDIT `src/renderer/styles.css` (cores dos pins)
+- EDIT `src/renderer/index.html` (campo Parall + v0.1.18)
+- EDIT `src/renderer/app.js` (currentParall + updateHints com taxa agregada + persist)
+- EDIT `src/preload.js` (scanRegion aceita concurrency)
+- EDIT `src/main.js` (concurrency clamp + passa pro API)
+- EDIT `src/gocollect-api.js` (scanRegion com pool de workers)
+- EDIT `package.json` + `poc-extension/manifest.json` (0.1.17 → 0.1.18, simetria)
+
 ## [0.1.17] - 2026-10-03 (Electron) - Centro do scan selecionável no mapa (click)
 
 ### Added

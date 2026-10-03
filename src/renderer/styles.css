@@ -1611,3 +1611,15 @@ body { display: flex; flex-direction: column; }
 }
 /* Cursor crosshair quando selecionando */
 .leaflet-container.selecting-scan-center { cursor: crosshair !important; }
+
+/* v0.1.18: cores por tipo de lure */
+.crate-pin-beacon {
+  background: linear-gradient(135deg, #9c27b0, #ba68c8) !important;
+  color: #fff !important;
+  box-shadow: 0 0 10px rgba(156, 39, 176, 0.7) !important;
+}
+.crate-pin-gold_rush {
+  background: linear-gradient(135deg, #f9ab00, #ffd600) !important;
+  color: #000 !important;
+  box-shadow: 0 0 10px rgba(249, 171, 0, 0.8) !important;
+}

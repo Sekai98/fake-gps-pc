@@ -159,12 +159,17 @@ ipcMain.handle('gocollect:scan-region', async (_evt, params) => {
   const pacingMs = params && typeof params.pacingMs === 'number'
     ? Math.max(100, Math.min(5000, params.pacingMs))
     : 600;
+  // v0.1.18: paralelismo opcional (1-10)
+  const concurrency = params && typeof params.concurrency === 'number'
+    ? Math.max(1, Math.min(10, params.concurrency))
+    : 1;
 
   currentScanCancelFlag = { cancel: false };
   const localFlag = currentScanCancelFlag;
 
   const result = await GocollectAPI.scanRegion(token, lat, lng, radiusKm, {
     pacingMs: pacingMs,
+    concurrency: concurrency,
     stepKm: 3,
     onProgress: function (progress) {
       if (mainWin && !mainWin.isDestroyed()) {
