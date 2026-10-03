@@ -1795,7 +1795,7 @@
     const SAVED_PARALL_KEY = 'fake-gps-pc:beacons-parall';
 
     const savedRadius = parseInt(localStorage.getItem(SAVED_RADIUS_KEY), 10);
-    if (savedRadius >= 2 && savedRadius <= 500) radiusInput.value = savedRadius;
+    if (savedRadius >= 2) radiusInput.value = savedRadius;
 
     const savedPacing = parseInt(localStorage.getItem(SAVED_PACING_KEY), 10);
     if (savedPacing >= 100 && savedPacing <= 5000) pacingInput.value = savedPacing;
@@ -1803,10 +1803,10 @@
     const savedParall = parseInt(localStorage.getItem(SAVED_PARALL_KEY), 10);
     if (savedParall >= 1 && savedParall <= 10) parallInput.value = savedParall;
 
-    function currentRadius() { return Math.max(2, Math.min(500, parseInt(radiusInput.value, 10) || 30)); }
+    function currentRadius() { return Math.max(2, parseInt(radiusInput.value, 10) || 30); }
     function currentPacing() { return Math.max(100, Math.min(5000, parseInt(pacingInput.value, 10) || 600)); }
     function currentParall() { return Math.max(1, Math.min(10, parseInt(parallInput.value, 10) || 1)); }
-    function estimatedCalls(r) { return Math.max(1, Math.round(Math.PI * r * r / 9)); }
+    function estimatedCalls(r) { return Math.max(1, Math.round(Math.PI * r * r / 6.25)); }
     function fmtSeconds(s) {
       if (s < 60) return '~' + s + 's';
       const m = Math.floor(s / 60); const r = s % 60;
@@ -1856,7 +1856,7 @@
     radiusInput.addEventListener('input', function () {
       updateHints();
       const r = parseInt(radiusInput.value, 10);
-      if (r >= 2 && r <= 500) localStorage.setItem(SAVED_RADIUS_KEY, String(r));
+      if (r >= 2) localStorage.setItem(SAVED_RADIUS_KEY, String(r));
     });
     pacingInput.addEventListener('input', function () {
       updateHints();

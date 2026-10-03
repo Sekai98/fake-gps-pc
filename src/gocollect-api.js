@@ -123,7 +123,10 @@ function extractNearbyLures(apiResponse, fromLat, fromLng) {
  * Step em km (default 3) - cada chamada cobre raio ~2km, step 3km da overlap seguro.
  */
 function buildScanGrid(centerLat, centerLng, radiusKm, stepKm) {
-  const step = typeof stepKm === 'number' ? stepKm : 3;
+  // v0.1.23: step 2.5km (antes 3km) pra fechar buracos geométricos no grid.
+  // Cada chamada cobre raio ~2km; com step 3km a diagonal entre 4 pontos
+  // tinha ponto não-coberto (2.12km > 2km). Step 2.5km garante cobertura.
+  const step = typeof stepKm === 'number' ? stepKm : 2.5;
   const latDegPerKm = 1 / 111;
   const lngDegPerKm = 1 / (111 * Math.cos(centerLat * Math.PI / 180));
   const stepLat = step * latDegPerKm;
@@ -162,7 +165,7 @@ function sleep(ms) {
 async function scanRegion(token, centerLat, centerLng, radiusKm, opts) {
   opts = opts || {};
   const pacingMs = typeof opts.pacingMs === 'number' ? opts.pacingMs : 600;
-  const stepKm = typeof opts.stepKm === 'number' ? opts.stepKm : 3;
+  const stepKm = typeof opts.stepKm === 'number' ? opts.stepKm : 2.5;
   const concurrency = Math.max(1, Math.min(10, typeof opts.concurrency === 'number' ? opts.concurrency : 1));
   const onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : null;
   const shouldCancel = typeof opts.shouldCancel === 'function' ? opts.shouldCancel : null;

@@ -2,6 +2,27 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
+## [0.1.23] - 2026-10-03 (Electron) - Raio sem limite + fix bug grid buracos + fix persistência
+
+### Fixed
+- **Bug: beacons dentro da área amarela do preview não eram achados pelo scan em alguns casos.**
+  Causa: step do grid era 3km mas cada chamada da API cobre raio ~2km. A diagonal entre 4 pontos do grid dava 2.12km até o ponto do meio — **maior que 2km**. Beacons que caíam exatamente nesse "buraco" geométrico escapavam. Fix: step reduzido pra **2.5km** (overlap suficiente pra garantir cobertura total). Trade-off: ~44% mais chamadas pelo mesmo raio.
+- **Bug: valores de config beacons às vezes não persistiam.**
+  Causa: a persistência tinha clamps `<= 500` que impediam salvar/carregar valores grandes. Fix: removidos todos os clamps máximos do raio.
+
+### Changed
+- **Raio sem limite máximo**: input HTML sem `max`, `currentRadius` só clamp mínimo (2), `main.js` idem. Pode digitar 1000, 10000, 10^20 — tudo aceito.
+- Hint do raio continua mostrando `⚠ muito lento` (>100km) e `⛔ impraticável` (>250km), mas o scan rola do mesmo jeito. Preview no mapa também sem limite.
+- `estimatedCalls` recalibrado pra step 2.5km (`π*r²/6.25` em vez de `π*r²/9`)
+- `buildScanGrid` default step `3 → 2.5` em `gocollect-api.js` e no call do `main.js`
+
+### Files
+- EDIT `src/renderer/index.html` (remove max, v0.1.23)
+- EDIT `src/renderer/app.js` (clamps removidos, estimatedCalls recalibrado)
+- EDIT `src/main.js` (clamp 500 removido, stepKm 2.5)
+- EDIT `src/gocollect-api.js` (default step 2.5 + comentário explicando)
+- EDIT `package.json` + `poc-extension/manifest.json` (0.1.22.1 → 0.1.23, simetria)
+
 ## [0.1.22.1] - 2026-10-03 (Electron) - Raio aumenta até 500km (antes 100)
 
 ### Changed
