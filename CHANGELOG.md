@@ -2,6 +2,15 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
+## [0.1.14.1] - 2026-10-03 (Extension) - Hotfix: resolver URL relativa pra capturar Bearer
+
+### Fixed
+- `poc-extension/inject.js`: a captura do `Authorization: Bearer` em requests pra `gocollect.fun` falhava quando o site chamava `fetch('/v1/crates')` com path relativo (porque `url.indexOf('gocollect.fun')` retornava -1). Agora usa `new URL(url, location.href)` pra resolver pra host atual antes do check.
+
+### Files
+- EDIT `poc-extension/inject.js` (new URL com base location.href)
+- EDIT `package.json` + `poc-extension/manifest.json` (bump 0.1.14 → 0.1.14.1, simetria mantida)
+
 ## [0.1.14] - 2026-10-03 (Electron) - Listador de beacons gocollect + captura automática de token
 
 ### Added
