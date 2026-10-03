@@ -123,25 +123,28 @@ function extractNearbyLures(apiResponse, fromLat, fromLng) {
  * Step em km (default 3) - cada chamada cobre raio ~2km, step 3km da overlap seguro.
  */
 function buildScanGrid(centerLat, centerLng, radiusKm, stepKm) {
-  // v0.1.23: step 2.5km (antes 3km) pra fechar buracos geométricos no grid.
-  // Cada chamada cobre raio ~2km; com step 3km a diagonal entre 4 pontos
-  // tinha ponto não-coberto (2.12km > 2km). Step 2.5km garante cobertura.
-  const step = typeof stepKm === 'number' ? stepKm : 2.5;
+  // v0.1.25: step 2.0km (antes 2.5) + margem de borda +2.5km. Garante que:
+  //  1. Nenhum ponto interno fica sem cobertura (step 2km + raio chamada ~2km = overlap seguro)
+  //  2. Borda do círculo é coberta por pontos "fora" do raio visual (necessário porque
+  //     uma chamada em (R, 0) só cobre até distância 2km de si mesma; pontos VIZINHOS
+  //     fora do raio é que cobrem a borda interna)
+  const step = typeof stepKm === 'number' ? stepKm : 2.0;
+  const marginKm = 2.5;  // raio da chamada (~2km) + half-step (overlap seguro)
+  const expandedKm = radiusKm + marginKm;
   const latDegPerKm = 1 / 111;
   const lngDegPerKm = 1 / (111 * Math.cos(centerLat * Math.PI / 180));
   const stepLat = step * latDegPerKm;
   const stepLng = step * lngDegPerKm;
-  const spanLat = radiusKm * latDegPerKm;
-  const spanLng = radiusKm * lngDegPerKm;
+  const spanLat = expandedKm * latDegPerKm;
+  const spanLng = expandedKm * lngDegPerKm;
   const points = [];
-  // Inclui centro
   points.push({ lat: centerLat, lng: centerLng, _d: 0 });
   for (let dLat = -spanLat; dLat <= spanLat + 1e-9; dLat += stepLat) {
     for (let dLng = -spanLng; dLng <= spanLng + 1e-9; dLng += stepLng) {
       if (dLat === 0 && dLng === 0) continue;
       const pt = { lat: centerLat + dLat, lng: centerLng + dLng };
       const dist = distanceMeters(centerLat, centerLng, pt.lat, pt.lng);
-      if (dist <= radiusKm * 1000) { pt._d = dist; points.push(pt); }
+      if (dist <= expandedKm * 1000) { pt._d = dist; points.push(pt); }
     }
   }
   // v0.1.22: scan em "espiral" - ordena do centro pra fora
@@ -165,7 +168,7 @@ function sleep(ms) {
 async function scanRegion(token, centerLat, centerLng, radiusKm, opts) {
   opts = opts || {};
   const pacingMs = typeof opts.pacingMs === 'number' ? opts.pacingMs : 600;
-  const stepKm = typeof opts.stepKm === 'number' ? opts.stepKm : 2.5;
+  const stepKm = typeof opts.stepKm === 'number' ? opts.stepKm : 2.0;
   const concurrency = Math.max(1, Math.min(10, typeof opts.concurrency === 'number' ? opts.concurrency : 1));
   const onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : null;
   const shouldCancel = typeof opts.shouldCancel === 'function' ? opts.shouldCancel : null;

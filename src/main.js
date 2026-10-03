@@ -170,7 +170,7 @@ ipcMain.handle('gocollect:scan-region', async (_evt, params) => {
   const result = await GocollectAPI.scanRegion(token, lat, lng, radiusKm, {
     pacingMs: pacingMs,
     concurrency: concurrency,
-    stepKm: 2.5,
+    stepKm: 2.0,
     onProgress: function (progress) {
       if (mainWin && !mainWin.isDestroyed()) {
         mainWin.webContents.send('gocollect:scan-progress', progress);

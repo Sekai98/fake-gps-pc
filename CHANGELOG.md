@@ -2,6 +2,35 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
+## [0.1.25] - 2026-10-03 (Electron) - Fix REAL do bug "lure escapa do scan" (margem de borda + step 2km)
+
+### Fixed
+- **Bug grave**: na v0.1.23 eu disse que ia aplicar o fix de margem de borda no `buildScanGrid` mas só mudei o `stepKm` (3→2.5). O filtro `if (dist <= radiusKm * 1000)` continuou descartando pontos "fora" do círculo, deixando buracos na borda **e também potencialmente em pontos internos** se o raio real por chamada da API for menor que ~2km.
+- Agora **tudo** corrigido:
+  - `step` **2.0km** (antes 2.5): overlap robusto mesmo que o raio real da chamada seja só 1.5km
+  - `expandedKm = radiusKm + 2.5km` margem: inclui pontos "fora" que cobrem a borda interna
+  - `spanLat`/`spanLng` do loop usam `expandedKm` (antes era só `radiusKm`)
+  - Filtro de distância usa `expandedKm * 1000` (antes `radiusKm * 1000`)
+
+### Changed
+- `scanRegion` default `stepKm`: 2.5 → 2.0
+- `main.js` chama `scanRegion` com `stepKm: 2.0`
+- `estimatedCalls` recalibrada: `π * (r + 2.5)² / 4` (antes `π * r² / 6.25`)
+  - Scan 20km: antes 201 → agora ~400 (quase 2x)
+  - Scan 100km: antes 5027 → agora ~8300
+  - Scan 500km: antes 125k → agora ~198k
+
+### Impact
+- **Trade-off**: ~2x mais chamadas pelo mesmo raio. Mais lento, mas **nada escapa**.
+- Pra manter velocidade similar, aumente paralelismo ou reduza pacing (vide hint na UI).
+
+### Files
+- EDIT `src/gocollect-api.js` (buildScanGrid com expandedKm + step 2.0 + comentários)
+- EDIT `src/main.js` (stepKm: 2.0 na chamada)
+- EDIT `src/renderer/app.js` (estimatedCalls recalibrada)
+- EDIT `src/renderer/index.html` (v0.1.25)
+- EDIT `package.json` + `poc-extension/manifest.json` (0.1.24 → 0.1.25, simetria)
+
 ## [0.1.24] - 2026-10-03 (Electron) - Captura passiva de lures via extension (zero scan ativo)
 
 ### Added
