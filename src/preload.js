@@ -39,8 +39,8 @@ contextBridge.exposeInMainWorld('FakeGPSBridge', {
       try { return ipcRenderer.invoke('gocollect:save-token', token); }
       catch (e) { return Promise.resolve({ ok: false }); }
     },
-    scanRegion: function (lat, lng, radiusKm) {
-      try { return ipcRenderer.invoke('gocollect:scan-region', { lat: lat, lng: lng, radiusKm: radiusKm }); }
+    scanRegion: function (lat, lng, radiusKm, pacingMs) {
+      try { return ipcRenderer.invoke('gocollect:scan-region', { lat: lat, lng: lng, radiusKm: radiusKm, pacingMs: pacingMs }); }
       catch (e) { return Promise.resolve({ ok: false, error: 'ipc-fail' }); }
     },
     cancelScan: function () {

@@ -2,6 +2,29 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
+## [0.1.16] - 2026-10-03 (Electron) - Pacing configurável no scan regional
+
+### Added
+- **Campo "Pacing: X ms"** no painel de beacons abaixo do Raio (100-5000ms, default 600)
+- Hint colorido em tempo real indicando risco:
+  - 🟢 verde (pacing ≥ 500ms): seguro
+  - 🟡 amarelo (300-499ms): perto do limite do Cloudflare
+  - 🔴 vermelho (< 300ms): alto risco de block
+- Mostra `req/s` + tempo total estimado do scan
+- Persistido em localStorage (`fake-gps-pc:beacons-pacing-ms`)
+- Bridge `scanRegion(lat, lng, radiusKm, pacingMs)` + clamp 100-5000ms no main
+
+### Confirmed by test
+- API `/v1/crates` do gocollect retorna crates/lures baseado no `lat/lng` do REQUEST, **não** na posição do avatar. Teste manual: chamada em BH centro retornou 22 crates, chamada em Rio centro retornou 21 crates, mesmo com avatar em Itaocara. **Scanner global é viável** sem necessidade de teleportar.
+
+### Files
+- EDIT `src/renderer/index.html` (campo pacing + v0.1.16 no header)
+- EDIT `src/renderer/styles.css` (classes de risco)
+- EDIT `src/renderer/app.js` (currentRadius/currentPacing/updateHints + persist localStorage)
+- EDIT `src/preload.js` (scanRegion aceita pacingMs)
+- EDIT `src/main.js` (ler pacingMs do payload, clamp)
+- EDIT `package.json` + `poc-extension/manifest.json` (0.1.15 → 0.1.16, simetria)
+
 ## [0.1.15] - 2026-10-03 (Electron) - Scan regional de beacons com raio configurável
 
 ### Added

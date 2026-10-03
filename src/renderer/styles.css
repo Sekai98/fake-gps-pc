@@ -1582,3 +1582,8 @@ body { display: flex; flex-direction: column; }
   padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 11px;
 }
 .beacons-cancel-btn:hover { background: #e53935; }
+
+/* v0.1.16: tons de risco do pacing */
+.beacons-pacing-risk-low { color: #6bff8e; }
+.beacons-pacing-risk-med { color: #f9ab00; }
+.beacons-pacing-risk-high { color: #ff6b6b; font-weight: bold; }

@@ -1742,33 +1742,59 @@
     // v0.1.15: scan regional
     const radiusInput = document.getElementById('beacons-radius-input');
     const radiusHint = document.getElementById('beacons-radius-hint');
+    // v0.1.16: pacing configurável
+    const pacingInput = document.getElementById('beacons-pacing-input');
+    const pacingHint = document.getElementById('beacons-pacing-hint');
     const elProgress = document.getElementById('beacons-progress');
     const elProgressFill = document.getElementById('beacons-progress-fill');
     const elProgressText = document.getElementById('beacons-progress-text');
     let currentLures = [];
 
-    // Persistência do raio em localStorage
     const SAVED_RADIUS_KEY = 'fake-gps-pc:beacons-radius-km';
+    const SAVED_PACING_KEY = 'fake-gps-pc:beacons-pacing-ms';
+
     const savedRadius = parseInt(localStorage.getItem(SAVED_RADIUS_KEY), 10);
-    if (savedRadius >= 2 && savedRadius <= 100) {
-      radiusInput.value = savedRadius;
+    if (savedRadius >= 2 && savedRadius <= 100) radiusInput.value = savedRadius;
+
+    const savedPacing = parseInt(localStorage.getItem(SAVED_PACING_KEY), 10);
+    if (savedPacing >= 100 && savedPacing <= 5000) pacingInput.value = savedPacing;
+
+    function currentRadius() { return Math.max(2, Math.min(100, parseInt(radiusInput.value, 10) || 30)); }
+    function currentPacing() { return Math.max(100, Math.min(5000, parseInt(pacingInput.value, 10) || 600)); }
+    function estimatedCalls(r) { return Math.max(1, Math.round(Math.PI * r * r / 9)); }
+    function fmtSeconds(s) {
+      if (s < 60) return '~' + s + 's';
+      const m = Math.floor(s / 60); const r = s % 60;
+      return '~' + m + 'min' + (r > 0 ? r + 's' : '');
     }
-    function updateRadiusHint() {
-      const r = Math.max(2, Math.min(100, parseInt(radiusInput.value, 10) || 30));
-      // Estimativa de chamadas: círculo em grid de 3km
-      const chamadas = Math.max(1, Math.round(Math.PI * r * r / 9));
-      const segundos = Math.round(chamadas * 0.6);
-      const label = segundos > 60
-        ? '~' + Math.round(segundos / 60) + 'min'
-        : '~' + segundos + 's';
-      radiusHint.textContent = '(~' + chamadas + ' chamadas · ' + label + ')';
+
+    function updateHints() {
+      const r = currentRadius();
+      const p = currentPacing();
+      const calls = estimatedCalls(r);
+      radiusHint.textContent = '(~' + calls + ' chamadas)';
+
+      // Risco baseado em req/s
+      const reqPerSec = 1000 / p;
+      const totalSec = Math.round(calls * p / 1000);
+      let risk = 'low', icon = '🟢';
+      if (p < 300) { risk = 'high'; icon = '🔴'; }
+      else if (p < 500) { risk = 'med'; icon = '🟡'; }
+      pacingHint.className = 'beacons-radius-hint beacons-pacing-risk-' + risk;
+      pacingHint.textContent = icon + ' ' + reqPerSec.toFixed(1) + ' req/s · ' + fmtSeconds(totalSec);
     }
+
     radiusInput.addEventListener('input', function () {
-      updateRadiusHint();
+      updateHints();
       const r = parseInt(radiusInput.value, 10);
       if (r >= 2 && r <= 100) localStorage.setItem(SAVED_RADIUS_KEY, String(r));
     });
-    updateRadiusHint();
+    pacingInput.addEventListener('input', function () {
+      updateHints();
+      const p = parseInt(pacingInput.value, 10);
+      if (p >= 100 && p <= 5000) localStorage.setItem(SAVED_PACING_KEY, String(p));
+    });
+    updateHints();
 
     function setTokenState(hasToken, preview) {
       if (hasToken) {
@@ -1899,14 +1925,15 @@
       const Movement = global.FakeGPS && global.FakeGPS.Movement;
       if (!Movement) { alert('Movement module ausente'); return; }
       const snap = Movement.getRaw();
-      const radiusKm = Math.max(2, Math.min(100, parseInt(radiusInput.value, 10) || 30));
+      const radiusKm = currentRadius();
+      const pacingMs = currentPacing();
 
       setScanning(true);
       elProgressFill.style.width = '0%';
       elProgressText.textContent = '0 / ?';
 
       try {
-        const result = await bridge.scanRegion(snap.lat, snap.lon, radiusKm);
+        const result = await bridge.scanRegion(snap.lat, snap.lon, radiusKm, pacingMs);
         if (!result.ok) {
           if (result.error === 'unauthorized') {
             setTokenState(false);
