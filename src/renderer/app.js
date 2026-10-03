@@ -41,7 +41,6 @@
   const speedSlider = document.getElementById('speed-slider');
   const speedValue = document.getElementById('speed-value');
   const btnCenter = document.getElementById('btn-center');
-  const btnGoto = document.getElementById('btn-goto');
   const btnLock = document.getElementById('btn-lock');
   const btnCancelRoute = document.getElementById('btn-cancel-route');
   const btnPause = document.getElementById('btn-pause');
@@ -397,6 +396,173 @@
     modalOrientation.classList.remove('hidden');
   }
   function closeOrientationModal() { modalOrientation.classList.add('hidden'); }
+
+  // --- Espelhamento do sensor remoto no preview 3D ---
+  // Quando sensor remoto esta ativo E modal 3D aberto, atualiza o preview em tempo real
+  // SEM alterar orientationState (nao salva, so visualiza).
+  const phone3dMirrorBadge = document.getElementById('phone-3d-mirror-badge');
+  let isMirroringRemote = false;
+
+  // Angulos cumulativos pra evitar "flicks" quando alpha passa de 359->0 ou similar.
+  // CSS rotateZ(0) depois de rotateZ(359) faz animacao de volta inteira - visualmente
+  // parece pulo. Unwrap mantem a rotacao continua.
+  let cumulAlpha = null, cumulBeta = null, cumulGamma = null;
+  let lastRawAlpha = null, lastRawBeta = null, lastRawGamma = null;
+
+  function unwrapAngle(cumul, lastRaw, newRaw) {
+    if (cumul === null || lastRaw === null) return { cumul: newRaw, lastRaw: newRaw };
+    let delta = newRaw - lastRaw;
+    // Menor diferenca angular (-180 a 180) considerando wrap
+    delta = ((delta + 540) % 360) - 180;
+    return { cumul: cumul + delta, lastRaw: newRaw };
+  }
+
+  function applyMirrored3D(alpha, beta, gamma) {
+    const a = unwrapAngle(cumulAlpha, lastRawAlpha, alpha);
+    const b = unwrapAngle(cumulBeta, lastRawBeta, beta);
+    // Gamma e small range (-90 a 90), raramente wrap - simplifica
+    cumulAlpha = a.cumul; lastRawAlpha = a.lastRaw;
+    cumulBeta = b.cumul; lastRawBeta = b.lastRaw;
+    cumulGamma = gamma; lastRawGamma = gamma;
+    phone3d.style.transform = 'rotateZ(' + cumulAlpha + 'deg) rotateX(' + cumulBeta + 'deg) rotateY(' + cumulGamma + 'deg)';
+  }
+
+  function resetMirrorCumulatives() {
+    cumulAlpha = null; cumulBeta = null; cumulGamma = null;
+    lastRawAlpha = null; lastRawBeta = null; lastRawGamma = null;
+  }
+
+  // --- Gravador de orientacao (debug) ---
+  let isRecording = false;
+  let recordStartTs = 0;
+  let recordedData = [];
+  let lastRecordedAlpha = null, lastRecordedBeta = null, lastRecordedGamma = null;
+  const oriRecordBtn = document.getElementById('ori-record-btn');
+  const oriRecordCopy = document.getElementById('ori-record-copy');
+  const oriRecordClear = document.getElementById('ori-record-clear');
+  const oriRecordCount = document.getElementById('ori-record-count');
+  const oriRecordLog = document.getElementById('ori-record-log');
+
+  function recordTick(alpha, beta, gamma) {
+    if (!isRecording) return;
+    // So grava se mudou (evita spam de ticks identicos)
+    const changed = lastRecordedAlpha === null
+      || Math.abs(alpha - lastRecordedAlpha) > 0.1
+      || Math.abs(beta - lastRecordedBeta) > 0.1
+      || Math.abs(gamma - lastRecordedGamma) > 0.1;
+    if (!changed) return;
+    const t = Date.now() - recordStartTs;
+    recordedData.push({ t: t, alpha: alpha, beta: beta, gamma: gamma });
+    lastRecordedAlpha = alpha;
+    lastRecordedBeta = beta;
+    lastRecordedGamma = gamma;
+    if (oriRecordCount) oriRecordCount.textContent = recordedData.length + ' ticks';
+  }
+
+  function startRecording() {
+    isRecording = true;
+    recordedData = [];
+    recordStartTs = Date.now();
+    lastRecordedAlpha = null;
+    lastRecordedBeta = null;
+    lastRecordedGamma = null;
+    oriRecordBtn.classList.add('recording');
+    oriRecordBtn.textContent = '⏹ Parar gravacao';
+    oriRecordCopy.classList.add('hidden');
+    oriRecordClear.classList.add('hidden');
+    oriRecordLog.classList.add('hidden');
+    oriRecordLog.value = '';
+    if (oriRecordCount) oriRecordCount.textContent = '0 ticks';
+  }
+
+  function stopRecording() {
+    isRecording = false;
+    oriRecordBtn.classList.remove('recording');
+    oriRecordBtn.textContent = '⏺ Gravar movimento';
+    // Formata log
+    const header = 't(ms)\tα(alpha)\tβ(beta)\tγ(gamma)\tΔα\tΔβ\tΔγ';
+    const lines = [header];
+    let prev = null;
+    recordedData.forEach(function (r) {
+      const da = prev ? (r.alpha - prev.alpha).toFixed(2) : '—';
+      const db = prev ? (r.beta - prev.beta).toFixed(2) : '—';
+      const dg = prev ? (r.gamma - prev.gamma).toFixed(2) : '—';
+      lines.push(
+        r.t + '\t' + r.alpha.toFixed(2) + '\t' + r.beta.toFixed(2)
+        + '\t' + r.gamma.toFixed(2) + '\t' + da + '\t' + db + '\t' + dg
+      );
+      prev = r;
+    });
+    oriRecordLog.value = lines.join('\n');
+    oriRecordLog.classList.remove('hidden');
+    oriRecordCopy.classList.remove('hidden');
+    oriRecordClear.classList.remove('hidden');
+  }
+
+  if (oriRecordBtn) {
+    oriRecordBtn.addEventListener('click', function () {
+      if (isRecording) stopRecording();
+      else startRecording();
+    });
+  }
+  if (oriRecordCopy) {
+    oriRecordCopy.addEventListener('click', function () {
+      navigator.clipboard.writeText(oriRecordLog.value);
+      oriRecordCopy.textContent = '✓ Copiado!';
+      setTimeout(function () { oriRecordCopy.textContent = '📋 Copiar log'; }, 1500);
+    });
+  }
+  if (oriRecordClear) {
+    oriRecordClear.addEventListener('click', function () {
+      recordedData = [];
+      oriRecordLog.value = '';
+      oriRecordLog.classList.add('hidden');
+      oriRecordCopy.classList.add('hidden');
+      oriRecordClear.classList.add('hidden');
+      if (oriRecordCount) oriRecordCount.textContent = '';
+    });
+  }
+
+  async function mirrorRemoteSensor() {
+    if (modalOrientation.classList.contains('hidden')) {
+      if (isMirroringRemote) {
+        isMirroringRemote = false;
+        if (phone3dMirrorBadge) phone3dMirrorBadge.classList.add('hidden');
+      }
+      return;
+    }
+    try {
+      const r = await fetch('http://127.0.0.1:3477/location?tab=' + encodeURIComponent(activeTabId));
+      const d = await r.json();
+      if (!d || !d.orientation || !d.orientation.ts) return;
+      const freshMs = Date.now() - d.orientation.ts;
+      const isLive = freshMs < 2000;
+      if (isLive) {
+        if (!isMirroringRemote) {
+          isMirroringRemote = true;
+          resetMirrorCumulatives();  // comeca do zero no primeiro frame live
+          if (phone3dMirrorBadge) phone3dMirrorBadge.classList.remove('hidden');
+        }
+        const o = d.orientation;
+        // Aplica no visual via unwrap pra evitar flicks em 359->0
+        applyMirrored3D(o.alpha, o.beta, o.gamma);
+        // Display dos valores NO RANGE ORIGINAL (nao cumulativo)
+        if (oriAlphaVal) oriAlphaVal.textContent = alphaToSlider(o.alpha).toFixed(0) + '°';
+        if (oriBetaVal) oriBetaVal.textContent = o.beta.toFixed(0) + '°';
+        if (oriGammaVal) oriGammaVal.textContent = o.gamma.toFixed(0) + '°';
+        // Grava tick se gravacao ativa
+        recordTick(o.alpha, o.beta, o.gamma);
+      } else {
+        if (isMirroringRemote) {
+          isMirroringRemote = false;
+          if (phone3dMirrorBadge) phone3dMirrorBadge.classList.add('hidden');
+          resetMirrorCumulatives();
+          applyOrientationToUI();  // volta aos valores manuais
+        }
+      }
+    } catch (e) {}
+  }
+  setInterval(mirrorRemoteSensor, 100);  // 10Hz pra ficar fluido
 
   btnOrientation.addEventListener('click', openOrientationModal);
   document.getElementById('modal-ori-close').addEventListener('click', closeOrientationModal);
@@ -1096,114 +1262,14 @@
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
-  // --- Ir para endereco / coordenadas (Nominatim) ---
-  const modalGoto = document.getElementById('modal-goto');
-  const gotoInput = document.getElementById('goto-input');
-  const gotoStatus = document.getElementById('goto-status');
-  const gotoError = document.getElementById('modal-goto-error');
-
-  function openGoto() {
-    gotoInput.value = '';
-    gotoStatus.classList.add('hidden');
-    gotoError.classList.add('hidden');
-    modalGoto.classList.remove('hidden');
-    setTimeout(function () { gotoInput.focus(); }, 50);
-  }
-
-  function closeGoto() {
-    modalGoto.classList.add('hidden');
-  }
-
-  // Tenta parsear "lat, lon" ou "lat,lon" ou "lat lon"
-  function parseCoords(txt) {
-    const m = txt.match(/^\s*(-?\d+(?:\.\d+)?)\s*[,\s]\s*(-?\d+(?:\.\d+)?)\s*$/);
-    if (!m) return null;
-    const lat = parseFloat(m[1]);
-    const lon = parseFloat(m[2]);
-    if (!isFinite(lat) || !isFinite(lon)) return null;
-    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
-    return { lat: lat, lon: lon };
-  }
-
-  async function geocodeNominatim(query) {
-    const url = 'https://nominatim.openstreetmap.org/search'
-      + '?q=' + encodeURIComponent(query)
-      + '&format=json&limit=1&addressdetails=0';
-    const resp = await fetch(url, {
-      headers: { 'Accept': 'application/json' }
-    });
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const arr = await resp.json();
-    if (!Array.isArray(arr) || arr.length === 0) return null;
-    const r = arr[0];
-    const lat = parseFloat(r.lat);
-    const lon = parseFloat(r.lon);
-    if (!isFinite(lat) || !isFinite(lon)) return null;
-    return { lat: lat, lon: lon, display: r.display_name || query };
-  }
-
-  async function submitGoto() {
-    const txt = gotoInput.value.trim();
-    if (!txt) return;
-    gotoError.classList.add('hidden');
-
-    if (!isTeleportAllowed()) {
-      gotoError.textContent = '🔒 Teleporte bloqueado. Feche este modal e destrave o cadeado antes.';
-      gotoError.classList.remove('hidden');
-      return;
-    }
-
-    // Primeiro tenta coordenadas
-    const coords = parseCoords(txt);
-    if (coords) {
-      Movement.teleport(coords.lat, coords.lon);
-      Map.map.setView([coords.lat, coords.lon], Map.map.getZoom(), { animate: true });
-      saveNow();
-      lockTeleportNow();
-      closeGoto();
-      return;
-    }
-
-    // Senao geocode
-    gotoStatus.textContent = '🔍 Buscando endereco...';
-    gotoStatus.classList.remove('hidden');
-    try {
-      const result = await geocodeNominatim(txt);
-      if (!result) {
-        gotoStatus.classList.add('hidden');
-        gotoError.textContent = 'Endereco nao encontrado. Tenta ser mais especifico.';
-        gotoError.classList.remove('hidden');
-        return;
-      }
-      Movement.teleport(result.lat, result.lon);
-      Map.map.setView([result.lat, result.lon], Map.map.getZoom(), { animate: true });
-      saveNow();
-      lockTeleportNow();
-      closeGoto();
-      console.log('[Goto] ' + result.display + ' -> ' + result.lat.toFixed(6) + ', ' + result.lon.toFixed(6));
-    } catch (err) {
-      gotoStatus.classList.add('hidden');
-      gotoError.textContent = 'Erro na busca: ' + err.message;
-      gotoError.classList.remove('hidden');
-    }
-  }
-
-  btnGoto.addEventListener('click', openGoto);
-  document.getElementById('modal-goto-cancel').addEventListener('click', closeGoto);
-  document.getElementById('modal-goto-go').addEventListener('click', submitGoto);
-  gotoInput.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') submitGoto();
-    if (e.key === 'Escape') closeGoto();
-  });
-  modalGoto.addEventListener('click', function (e) {
-    if (e.target === modalGoto) closeGoto();
-  });
-
   function updatePauseUI() {
     btnPause.classList.toggle('paused', isPaused);
-    btnPause.textContent = isPaused ? '▶ Continuar' : '⏸ Pausar';
+    btnPause.textContent = isPaused ? '▶ Retomar GPS' : '⏸ Congelar GPS';
     statusIndicator.classList.toggle('paused', isPaused);
-    statusIndicator.textContent = isPaused ? 'PAUSADO' : 'ATIVO';
+    statusIndicator.textContent = isPaused ? '📍 CONGELADO' : 'ATIVO';
+    btnPause.title = isPaused
+      ? 'GPS congelado - extension recebe mesma loc fixa. Click pra retomar.'
+      : 'Congela a loc enviada pra extension. Sensor remoto continua funcionando normal.';
   }
 
   // --- Main loop (requestAnimationFrame ~60fps) ---
@@ -1274,8 +1340,11 @@
   window.addEventListener('beforeunload', saveNow);
 
   // --- Publica posicao pro servidor HTTP a 10Hz (100ms) ---
+  // Se pausado: para de publicar location (server mantem ultima = loc congelada
+  // pra extension). Orientation continua vindo via POST /orientation do sensor remoto.
   setInterval(function () {
     if (!window.FakeGPSBridge || !window.FakeGPSBridge.publishLocation) return;
+    if (isPaused) return;
     const pos = Movement.getNoisy();
     // Alpha: se alphaFromHeading ligado, bussola segue heading do GPS (CW->CCW conversion).
     //        Senao, usa o valor manual do slider/drag.
@@ -1284,6 +1353,7 @@
       ? ((360 - rawHeading) % 360 + 360) % 360
       : orientationState.alpha;
     window.FakeGPSBridge.publishLocation({
+      tabId: activeTabId,  // alpha4: isola localizacao por aba no server
       lat: pos.lat,
       lon: pos.lon,
       heading: pos.heading,
@@ -1297,6 +1367,97 @@
     });
   }, 100);
 
+  // --- Modal sensor remoto (conexao GLOBAL - uma URL atende todas as abas) ---
+  const modalRemoteSensor = document.getElementById('modal-remote-sensor');
+  const btnRemoteSensor = document.getElementById('header-remote-sensor');
+  const headerRsState = document.getElementById('rs-state');
+  const remoteSensorUrlText = document.getElementById('remote-sensor-url-text');
+  const remoteSensorStatus = document.getElementById('remote-sensor-status');
+  const remoteSensorIps = document.getElementById('remote-sensor-ips');
+
+  let cachedLocalIps = null;
+
+  async function ensureLocalIps() {
+    if (cachedLocalIps) return cachedLocalIps;
+    if (window.FakeGPSBridge && window.FakeGPSBridge.getLocalIps) {
+      cachedLocalIps = await window.FakeGPSBridge.getLocalIps();
+    } else {
+      cachedLocalIps = { port: 3477, httpsPort: null, ips: [] };
+    }
+    return cachedLocalIps;
+  }
+
+  function globalSensorUrl(info) {
+    const ips = (info && info.ips) || [];
+    if (ips.length === 0) return null;
+    const primary = ips[0];
+    const port = info.httpsPort || info.port;
+    const proto = info.httpsPort ? 'https' : 'http';
+    // Sem ?tab - server aplica globalmente em todas as abas
+    return proto + '://' + primary.address + ':' + port + '/sensor';
+  }
+
+  async function renderRemoteSensorModal() {
+    const info = await ensureLocalIps();
+    const ips = (info && info.ips) || [];
+    const url = globalSensorUrl(info);
+
+    remoteSensorUrlText.textContent = url || '(nenhum IP LAN detectado)';
+    if (ips.length === 0) {
+      remoteSensorIps.textContent = 'nenhum IP LAN detectado';
+    } else {
+      remoteSensorIps.innerHTML = ips.map(function (ip) {
+        return ip.address + ' <span style="color:var(--muted)">(' + ip.name + ')</span>';
+      }).join(' · ');
+    }
+  }
+
+  function openRemoteSensorModal() {
+    modalRemoteSensor.classList.remove('hidden');
+    renderRemoteSensorModal();
+  }
+
+  if (btnRemoteSensor) {
+    btnRemoteSensor.addEventListener('click', openRemoteSensorModal);
+    const closeBtn = document.getElementById('modal-remote-sensor-close');
+    if (closeBtn) closeBtn.addEventListener('click', function () {
+      modalRemoteSensor.classList.add('hidden');
+    });
+    modalRemoteSensor.addEventListener('click', function (e) {
+      if (e.target === modalRemoteSensor) modalRemoteSensor.classList.add('hidden');
+    });
+  }
+
+  // Polling: status global (basta UMA aba ter remoteActive - como e global, todas tem o mesmo ts)
+  async function pollRemoteSensorStatus() {
+    try {
+      const r = await fetch('http://127.0.0.1:3477/tabs');
+      const d = await r.json();
+      const tabs = (d && d.tabs) || [];
+      const anyActive = tabs.some(function (t) { return t.remoteActive; });
+
+      if (headerRsState) {
+        if (anyActive) {
+          headerRsState.textContent = 'Ativo';
+          btnRemoteSensor.classList.add('active');
+        } else {
+          headerRsState.textContent = 'Desativado';
+          btnRemoteSensor.classList.remove('active');
+        }
+      }
+      if (remoteSensorStatus) {
+        if (anyActive) {
+          remoteSensorStatus.textContent = '🟢 Conectado (recebendo)';
+          remoteSensorStatus.classList.add('connected');
+        } else {
+          remoteSensorStatus.textContent = '⚪ Aguardando conexao';
+          remoteSensorStatus.classList.remove('connected');
+        }
+      }
+    } catch (e) {}
+  }
+  setInterval(pollRemoteSensorStatus, 500);
+
   // --- Tab bar (UI das abas - alpha2: s/ troca de contexto real) ---
   const tabBarEl = document.getElementById('tab-bar');
 
@@ -1308,29 +1469,41 @@
       const el = document.createElement('div');
       el.className = 'tab' + (tab.id === activeId ? ' active' : '');
       el.dataset.tabId = tab.id;
+      const hasProxy = tab.proxy && tab.proxy.ip;
+      const proxyLabel = hasProxy
+        ? 'Proxy: ' + tab.proxy.ip + (tab.proxy.port ? ':' + tab.proxy.port : '')
+        : '';
       el.innerHTML = [
         '<span class="tab-dot"></span>',
         '<span class="tab-name" data-rename>', escapeHtml(tab.name), '</span>',
+        hasProxy ? '<span class="tab-proxy-icon" title="' + escapeHtml(proxyLabel) + '">🌐</span>' : '',
+        '<button class="tab-config-btn" title="Config da aba">⚙</button>',
         (TabsManager.all().length > 1
           ? '<button class="tab-close" title="Fechar aba">✕</button>'
           : '')
       ].join('');
 
-      // Click: troca aba ativa (ainda nao troca contexto real - alpha3)
       el.addEventListener('click', function (e) {
         if (e.target.classList.contains('tab-close')) return;
-        if (e.target.hasAttribute('data-rename') && e.detail === 2) return; // dblclick trata separado
+        if (e.target.classList.contains('tab-config-btn')) return;
+        if (e.target.hasAttribute('data-rename') && e.detail === 2) return;
         TabsManager.switchTo(tab.id);
       });
 
-      // Duplo-click no nome: renomeia inline
       const nameEl = el.querySelector('[data-rename]');
       nameEl.addEventListener('dblclick', function (e) {
         e.stopPropagation();
         startRename(tab.id, nameEl);
       });
 
-      // Click no X: remove (com confirm)
+      const configBtn = el.querySelector('.tab-config-btn');
+      if (configBtn) {
+        configBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          openTabConfig(tab.id);
+        });
+      }
+
       const closeBtn = el.querySelector('.tab-close');
       if (closeBtn) {
         closeBtn.addEventListener('click', function (e) {
@@ -1382,17 +1555,176 @@
     });
   }
 
-  TabsManager.on('change', renderTabBar);
+  // v0.1.14: publica lista de abas pro server (pra extension listar no dropdown)
+  function syncTabsListToServer() {
+    if (window.FakeGPSBridge && window.FakeGPSBridge.publishTabsList) {
+      // Envia versao limpa (sem metadados internos)
+      const tabs = TabsManager.all().map(function (t) {
+        return {
+          id: t.id,
+          name: t.name,
+          proxy: t.proxy ? { ip: t.proxy.ip, port: t.proxy.port } : null
+        };
+      });
+      window.FakeGPSBridge.publishTabsList(tabs);
+    }
+  }
+
+  TabsManager.on('change', function () { renderTabBar(); syncTabsListToServer(); });
   TabsManager.on('switch', function () {
-    // Alpha3: reload da pagina pra re-bootar com dados da nova aba
     console.log('[Tabs] trocando pra', TabsManager.getActive() && TabsManager.getActive().name,
       '- recarregando contexto...');
-    // Pequeno delay pra deixar o saveList terminar
     setTimeout(function () { window.location.reload(); }, 100);
   });
   renderTabBar();
+  syncTabsListToServer();
 
-  console.log('%c[Fake GPS PC] v0.1.12 pronto',
+  // --- Modal "Config da aba" (v0.1.14) ---
+  const modalTabConfig = document.getElementById('modal-tab-config');
+  const tabConfigName = document.getElementById('tab-config-name');
+  const tabConfigRename = document.getElementById('tab-config-rename');
+  const tabConfigProxyOneline = document.getElementById('tab-config-proxy-oneline');
+  const tabConfigProxyIp = document.getElementById('tab-config-proxy-ip');
+  const tabConfigProxyPort = document.getElementById('tab-config-proxy-port');
+  const tabConfigProxyUser = document.getElementById('tab-config-proxy-user');
+  const tabConfigProxyPass = document.getElementById('tab-config-proxy-pass');
+
+  // Parse "IP:PORT:USER:PASS" (ou subset) nos campos individuais
+  function parseProxyOneline() {
+    const raw = (tabConfigProxyOneline.value || '').trim();
+    if (!raw) return;
+    const parts = raw.split(':');
+    tabConfigProxyIp.value = parts[0] || '';
+    tabConfigProxyPort.value = parts[1] || '';
+    tabConfigProxyUser.value = parts[2] || '';
+    // Senha pode conter ':' - junta tudo depois do 3o separador
+    tabConfigProxyPass.value = parts.length > 3 ? parts.slice(3).join(':') : '';
+  }
+  if (tabConfigProxyOneline) {
+    tabConfigProxyOneline.addEventListener('paste', function () {
+      setTimeout(parseProxyOneline, 10);  // apos o paste terminar
+    });
+    const parseBtn = document.getElementById('tab-config-parse-proxy');
+    if (parseBtn) parseBtn.addEventListener('click', parseProxyOneline);
+  }
+  const tabConfigLocationInfo = document.getElementById('tab-config-location-info');
+  const tabConfigLocationText = document.getElementById('tab-config-location-text');
+  const tabConfigError = document.getElementById('tab-config-error');
+  let currentConfigTabId = null;
+
+  function openTabConfig(tabId) {
+    const tab = TabsManager.get(tabId);
+    if (!tab) return;
+    currentConfigTabId = tabId;
+    tabConfigName.textContent = tab.name;
+    tabConfigRename.value = tab.name;
+    const proxy = tab.proxy || {};
+    tabConfigProxyOneline.value = '';  // sempre vazio ao abrir (so pra COLAR novo)
+    tabConfigProxyIp.value = proxy.ip || '';
+    tabConfigProxyPort.value = proxy.port || '';
+    tabConfigProxyUser.value = proxy.user || '';
+    tabConfigProxyPass.value = proxy.password || '';
+    if (proxy.lat != null && proxy.lon != null) {
+      tabConfigLocationText.textContent = (proxy.locationLabel || 'coord')
+        + ' (' + proxy.lat.toFixed(4) + ', ' + proxy.lon.toFixed(4) + ')';
+      tabConfigLocationInfo.classList.remove('hidden');
+    } else {
+      tabConfigLocationInfo.classList.add('hidden');
+    }
+    tabConfigError.classList.add('hidden');
+    modalTabConfig.classList.remove('hidden');
+  }
+
+  function closeTabConfig() {
+    const tab = TabsManager.get(currentConfigTabId);
+    if (!tab) { modalTabConfig.classList.add('hidden'); return; }
+    const newName = tabConfigRename.value.trim().slice(0, 20);
+    if (newName && newName !== tab.name) TabsManager.rename(tab.id, newName);
+    const ip = tabConfigProxyIp.value.trim();
+    const port = tabConfigProxyPort.value.trim();
+    const user = tabConfigProxyUser.value;
+    const password = tabConfigProxyPass.value;
+    if (ip) {
+      const prev = tab.proxy && tab.proxy.ip === ip ? tab.proxy : {};
+      TabsManager.updateProxy(tab.id, {
+        ip: ip, port: port, user: user, password: password,
+        lat: prev.lat, lon: prev.lon,
+        locationLabel: prev.locationLabel,
+        locatedAt: prev.locatedAt
+      });
+    } else {
+      TabsManager.updateProxy(tab.id, null);
+    }
+    modalTabConfig.classList.add('hidden');
+  }
+
+  async function locateProxyAndTeleport() {
+    const ip = tabConfigProxyIp.value.trim();
+    if (!ip) {
+      tabConfigError.textContent = 'Preenche o IP da proxy primeiro.';
+      tabConfigError.classList.remove('hidden');
+      return;
+    }
+    tabConfigError.textContent = 'Localizando...';
+    tabConfigError.classList.remove('hidden');
+    try {
+      // ipwho.is - HTTPS gratis, nao precisa auth, retorna lat/lon
+      const r = await fetch('https://ipwho.is/' + encodeURIComponent(ip));
+      const data = await r.json();
+      if (!data.success) {
+        tabConfigError.textContent = 'Falha: ' + (data.message || 'IP invalido');
+        return;
+      }
+      const label = [data.city, data.region, data.country].filter(Boolean).join(', ');
+      tabConfigLocationText.textContent = label + ' (' + data.latitude.toFixed(4) + ', ' + data.longitude.toFixed(4) + ')';
+      tabConfigLocationInfo.classList.remove('hidden');
+      tabConfigError.classList.add('hidden');
+
+      const port = tabConfigProxyPort.value.trim();
+      const user = tabConfigProxyUser.value;
+      const password = tabConfigProxyPass.value;
+      TabsManager.updateProxy(currentConfigTabId, {
+        ip: ip, port: port, user: user, password: password,
+        lat: data.latitude, lon: data.longitude,
+        locationLabel: label, locatedAt: Date.now()
+      });
+
+      // Se a aba configurada e a ativa, teleporta agora
+      if (currentConfigTabId === TabsManager.getActiveId()) {
+        Movement.teleport(data.latitude, data.longitude);
+        Map.map.setView([data.latitude, data.longitude], Map.map.getZoom(), { animate: true });
+        saveNow();
+      } else {
+        tabConfigError.textContent = '✓ Localizado. Clique na aba pra teleportar la.';
+        tabConfigError.classList.remove('hidden');
+      }
+    } catch (err) {
+      tabConfigError.textContent = 'Erro: ' + err.message;
+      tabConfigError.classList.remove('hidden');
+    }
+  }
+
+  function clearProxyFromTab() {
+    tabConfigProxyOneline.value = '';
+    tabConfigProxyIp.value = '';
+    tabConfigProxyPort.value = '';
+    tabConfigProxyUser.value = '';
+    tabConfigProxyPass.value = '';
+    tabConfigLocationInfo.classList.add('hidden');
+    tabConfigError.classList.add('hidden');
+  }
+
+  document.getElementById('tab-config-close').addEventListener('click', closeTabConfig);
+  document.getElementById('tab-config-locate').addEventListener('click', locateProxyAndTeleport);
+  document.getElementById('tab-config-clear').addEventListener('click', clearProxyFromTab);
+  modalTabConfig.addEventListener('click', function (e) {
+    if (e.target === modalTabConfig) closeTabConfig();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (!modalTabConfig.classList.contains('hidden') && e.key === 'Escape') closeTabConfig();
+  });
+
+  console.log('%c[Fake GPS PC] v0.1.14 pronto',
     'background:#1a73e8;color:#fff;padding:2px 6px;border-radius:3px');
   console.log('Controles: joystick (mouse) ou WASD/setas | ⏸ pausar sem perder posicao');
   console.log('Posicao auto-salva a cada 5s + ao fechar');

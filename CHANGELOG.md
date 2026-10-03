@@ -2,6 +2,26 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
+## [infra] - 2026-10-02 (Electron startup) - iniciar.bat com check firewall + mostra IPs LAN
+
+### Added
+- `iniciar.bat` agora:
+  - Mostra os endereços LAN do PC (filtra 192.168.* e 10.* reais, exclui APIPA/Hamachi/VPN) prontos pra colar no app Android em modo slave: `http://IP:3477`
+  - Verifica se existe regra de firewall `FakeGPS 3477`. Se não, pergunta `[S/N]` e dispara UAC pra criar automaticamente via o novo script `autorizar-firewall.ps1`
+- CREATE `autorizar-firewall.ps1`: roda em PowerShell admin, cria `New-NetFirewallRule` inbound TCP 3477 pro Node ser alcançável via WiFi.
+
+### Why
+- Antes era necessário rodar manualmente `New-NetFirewallRule` como admin em cada PC novo. Agora o próprio startup script faz essa verificação e oferece 1-clique + UAC.
+
+### Files
+- CREATE `autorizar-firewall.ps1`
+- EDIT `iniciar.bat` (setlocal enabledelayedexpansion, bloco IPs + check firewall + fallback UAC)
+
+### Not bumped
+- `package.json` continua em `0.1.0` (débito antigo, não resolvido nesta mudança)
+- `poc-extension/manifest.json` continua em `0.1.14` local (débito antigo, não resolvido)
+- Trabalho acumulado documentado como `0.1.13` no CHANGELOG continua não commitado (débito, decisão explícita de ignorar nesta mudança)
+
 ## [0.2.0-alpha7] - 2026-10-02 (Android APK) - Dropdown de tabs + parar slave + status ao vivo
 
 ### Added - UX do modo slave
@@ -144,6 +164,38 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 ### Notes
 - APK é **independente** do Fake GPS do PC; não requer o servidor Electron.
 - Próximas alphas: ação na notificação pra reabrir joystick sem voltar no app (alpha4), mapa clicável dentro do app (alpha5).
+
+## [0.1.13] - 2026-10-02 (Electron) - Sensor remoto do celular + multi-abas (alphas 1-4)
+
+### Added - Sensor remoto do celular
+- Novo endpoint `GET /sensor` serve pagina mobile pro celular do user
+- Novo endpoint `POST /orientation` aceita `{tabId, alpha, beta, gamma}` do celular
+- Server HTTP agora aceita conexoes LAN (bind `0.0.0.0`, nao mais apenas `127.0.0.1`)
+- `getLocalIps()` em `server.js` + IPC `fake-gps:get-local-ips` + bridge no preload
+- UI: botao **"📡 Sensor remoto"** no painel CONTROLES abre modal com URL pro celular + status
+- Celular abre URL no Chrome/Safari, autoriza sensor, envia 20Hz pelo WiFi
+
+### Added - Multi-abas (alpha1 a alpha4 consolidados)
+- **alpha1**: core refatorado pra factory functions (`createMovement`, `createAutoPilot`, `createMap`, `createRoutePlanner`, `createCrates`, `createPersistence`)
+- **alpha2**: UI de abas no topo (criar/renomear/remover/trocar) persistida em `fake-gps-pc:tabs-list`
+- **alpha3**: troca de contexto real por aba via reload da pagina; `Persistence` e `RoutePlanner` com storageKey namespaced (`fake-gps-pc:tab-{id}:state` e `:route-plan`)
+- **alpha4**: server HTTP isola localizacao por tab (`locationsByTab[tabId]`, `orientationsByTab[tabId]`); `GET /location?tab=X` retorna da aba X; extension popup tem campo "Aba" (tabId) que anexa `?tab=X` no polling
+
+### Files
+- CREATE `src/renderer/tabs-manager.js` (gerenciador de abas)
+- EDIT `src/server.js` (bind 0.0.0.0, /sensor, POST /orientation, locationsByTab, getLocalIps, SENSOR_HTML inline)
+- EDIT `src/main.js` (IPC get-local-ips)
+- EDIT `src/preload.js` (bridge getLocalIps)
+- EDIT `src/renderer/index.html` (tab bar, botao sensor remoto, modal sensor remoto)
+- EDIT `src/renderer/styles.css` (tab bar, remote-sensor-* modal)
+- EDIT `src/renderer/app.js` (TabsManager wiring, Persistence/RoutePlanner namespaced, modal sensor remoto, publishLocation com tabId)
+- EDIT `poc-extension/popup.html` (campo tab-id)
+- EDIT `poc-extension/popup.js` (save/load tabId)
+- EDIT `poc-extension/content.js` (anexa ?tab=X no polling)
+- EDIT `src/renderer/movement.js`, `autopilot.js`, `map.js`, `route-planner.js`, `crates.js`, `persistence.js` (factories)
+
+### Backup
+- Tag git `v0.1.11.6-stable` criada antes da refatoracao
 
 ## [0.1.12] - 2026-10-01 (Electron) - Prep multi-abas
 

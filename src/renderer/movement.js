@@ -130,14 +130,18 @@
     }
 
     function getNoisy() {
-      const j = function () { return (Math.random() - 0.5) * 0.00003; };
+      // Jitter so quando efetivamente andando (evita tremor com personagem parado)
+      const moving = state.speedMps > 0.1;
+      const j = moving
+        ? function () { return (Math.random() - 0.5) * 0.00001; }  // ~1m
+        : function () { return 0; };
       return {
         lat: state.lat + j(),
         lon: state.lon + j(),
         heading: state.heading,
         speedMps: state.speedMps,
         speedKmh: mpsToKmh(state.speedMps),
-        accuracy: 5 + Math.random() * 5
+        accuracy: moving ? (3 + Math.random() * 3) : 3
       };
     }
 

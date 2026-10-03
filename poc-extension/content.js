@@ -3,21 +3,29 @@
 // via window.postMessage. Tambem propaga o estado liga/desliga do popup.
 
 const PORTS_TO_TRY = [3477, 3478, 3479, 3480];
-const POLL_INTERVAL_MS = 500;    // 2Hz - mais que suficiente, GPS real callback e 1Hz
+const POLL_INTERVAL_MS = 100;    // 10Hz - mais fluido pra orientation (minigame) e movimento
 const DISCOVERY_INTERVAL_MS = 5000; // se nenhuma porta responder, tenta de novo a cada 5s
 
 const STATE_STORAGE_KEY = 'fakeGPSEnabled';
 const LAST_LOCATION_KEY = 'fakeGPSLastLocation';  // ultima loc recebida do Electron, usada como fallback
+const TAB_ID_STORAGE_KEY = 'fakeGPSTabId';        // alpha4: qual aba do fake GPS este Brave consome
+const SERVER_IP_STORAGE_KEY = 'fakeGPSServerIp';  // v0.1.13: IP do PC (p/ Kiwi Browser mobile)
 const SAVE_LOCATION_THROTTLE_MS = 3000;           // nao salva no storage mais que 1x a cada 3s
 
 let activePort = null;
 let lastDiscoveryTry = 0;
 let overrideEnabled = true; // padrao: ligado
+let tabId = '';             // alpha4: aba configurada no popup
+let serverIp = '';          // v0.1.13: IP do PC (vazio = 127.0.0.1)
 let lastSavedLocationTs = 0;
+
+function getServerHost() {
+  return serverIp || '127.0.0.1';
+}
 
 async function tryPort(port) {
   try {
-    const r = await fetch('http://127.0.0.1:' + port + '/health', {
+    const r = await fetch('http://' + getServerHost() + ':' + port + '/health', {
       cache: 'no-store',
       signal: AbortSignal.timeout(300)
     });
@@ -78,7 +86,10 @@ async function pollOnce() {
   }
 
   try {
-    const r = await fetch('http://127.0.0.1:' + activePort + '/location', {
+    // v0.1.13: usa IP configurado no popup (celular Kiwi) ou 127.0.0.1 (desktop)
+    const url = 'http://' + getServerHost() + ':' + activePort + '/location'
+      + (tabId ? '?tab=' + encodeURIComponent(tabId) : '');
+    const r = await fetch(url, {
       cache: 'no-store',
       signal: AbortSignal.timeout(300)
     });
@@ -92,13 +103,14 @@ async function pollOnce() {
   }
 }
 
-// --- Inicializacao: le estado + ultima location salva ---
-chrome.storage.local.get([STATE_STORAGE_KEY, LAST_LOCATION_KEY], function (data) {
-  // Default: ligado (se nunca foi setado)
+// --- Inicializacao: le estado + ultima location salva + tabId + serverIp configurados ---
+chrome.storage.local.get([STATE_STORAGE_KEY, LAST_LOCATION_KEY, TAB_ID_STORAGE_KEY, SERVER_IP_STORAGE_KEY], function (data) {
   overrideEnabled = data[STATE_STORAGE_KEY] !== false;
+  tabId = data[TAB_ID_STORAGE_KEY] || '';
+  serverIp = data[SERVER_IP_STORAGE_KEY] || '';
   propagateEnabledState();
-  // Fallback inicial: se tem ultima location salva, usa ela como baseline
-  // (antes do inject.js cair pro fallback estatico Paulista)
+  if (tabId) console.log('[Fake GPS content] configurado pra aba: ' + tabId);
+  if (serverIp) console.log('[Fake GPS content] servidor remoto: ' + serverIp);
   if (data[LAST_LOCATION_KEY]) {
     sendLocationToInject(data[LAST_LOCATION_KEY]);
     console.log(
@@ -108,15 +120,22 @@ chrome.storage.local.get([STATE_STORAGE_KEY, LAST_LOCATION_KEY], function (data)
   }
 });
 
-// Observa mudancas no estado (quando popup liga/desliga)
+// Observa mudancas no estado (popup liga/desliga, troca tabId, troca serverIp)
 chrome.storage.onChanged.addListener(function (changes, area) {
   if (area !== 'local') return;
-  if (!changes[STATE_STORAGE_KEY]) return;
-  overrideEnabled = changes[STATE_STORAGE_KEY].newValue !== false;
-  propagateEnabledState();
-  if (!overrideEnabled) {
-    // Desligou: solta a porta pra forcar redescoberta quando reativar
-    activePort = null;
+  if (changes[STATE_STORAGE_KEY]) {
+    overrideEnabled = changes[STATE_STORAGE_KEY].newValue !== false;
+    propagateEnabledState();
+    if (!overrideEnabled) activePort = null;
+  }
+  if (changes[TAB_ID_STORAGE_KEY]) {
+    tabId = changes[TAB_ID_STORAGE_KEY].newValue || '';
+    console.log('[Fake GPS content] tabId trocado pra: ' + (tabId || '(vazio)'));
+  }
+  if (changes[SERVER_IP_STORAGE_KEY]) {
+    serverIp = changes[SERVER_IP_STORAGE_KEY].newValue || '';
+    activePort = null;  // forca re-descoberta no novo IP
+    console.log('[Fake GPS content] serverIp trocado pra: ' + (serverIp || '127.0.0.1'));
   }
 });
 
@@ -128,8 +147,7 @@ window.addEventListener('message', async function (evt) {
   if (evt.source !== window) return;
   const d = evt.data;
   if (!d || d.__fakegps_crates !== true) return;
-  if (!overrideEnabled) return; // nao envia se extension esta desligada
-  // Precisa de porta ativa; se nao tiver, tenta descobrir
+  if (!overrideEnabled) return;
   let port = activePort;
   if (!port) {
     port = await discoverServer();
@@ -137,7 +155,7 @@ window.addEventListener('message', async function (evt) {
     activePort = port;
   }
   try {
-    await fetch('http://127.0.0.1:' + port + '/crates', {
+    await fetch('http://' + getServerHost() + ':' + port + '/crates', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ crates: d.crates, lures: d.lures || [], ts: d.ts }),

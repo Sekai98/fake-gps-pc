@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://*.tile.openstreetmap.org data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.tile.openstreetmap.org; connect-src 'self' https://nominatim.openstreetmap.org https://routing.openstreetmap.de;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://*.tile.openstreetmap.org data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.tile.openstreetmap.org; connect-src 'self' http://127.0.0.1:* http://localhost:* https://nominatim.openstreetmap.org https://routing.openstreetmap.de https://ipwho.is;">
   <title>Fake GPS PC</title>
   <link rel="stylesheet" href="../../node_modules/leaflet/dist/leaflet.css">
   <link rel="stylesheet" href="styles.css">
@@ -12,9 +12,14 @@
     <div class="title">
       <span class="dot"></span>
       Fake GPS PC
-      <span class="version">v0.1.12</span>
+      <span class="version">v0.1.14</span>
     </div>
     <div class="status">
+      <button id="header-remote-sensor" class="header-remote-sensor" title="Sensor remoto (celular via WiFi)">
+        <span class="rs-icon">📡</span>
+        <span class="rs-label">Sensor:</span>
+        <span class="rs-state" id="rs-state">Desativado</span>
+      </button>
       <span class="status-label">Status:</span>
       <span class="status-value" id="status-indicator">ATIVO</span>
     </div>
@@ -158,11 +163,102 @@
     </div>
   </div>
 
+  <!-- Modal: config da aba (nome + proxy + geolocation) -->
+  <div id="modal-tab-config" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-title">⚙ Config da aba: <span id="tab-config-name">—</span></div>
+      <div class="modal-subtitle">Nome e proxy associada. Credenciais da proxy ficam no Dolphin, so o IP vem aqui.</div>
+
+      <div class="modal-field">
+        <label>Nome da aba</label>
+        <input type="text" id="tab-config-rename" maxlength="20">
+      </div>
+
+      <div class="modal-field">
+        <label>Colar proxy (IP:PORT:USER:PASS)</label>
+        <div style="display: flex; gap: 6px;">
+          <input type="text" id="tab-config-proxy-oneline" placeholder="160.116.129.234:8000:user:pass" style="flex: 1;" autocomplete="off">
+          <button id="tab-config-parse-proxy" class="modal-btn modal-btn-secondary" style="padding: 6px 12px; font-size: 12px;">Parse</button>
+        </div>
+      </div>
+
+      <div class="modal-field">
+        <label>IP da proxy</label>
+        <input type="text" id="tab-config-proxy-ip" placeholder="ex: 160.116.129.234">
+      </div>
+
+      <div class="modal-field">
+        <label>Porta</label>
+        <input type="text" id="tab-config-proxy-port" placeholder="ex: 8000">
+      </div>
+
+      <div class="modal-field">
+        <label>Usuario (opcional)</label>
+        <input type="text" id="tab-config-proxy-user" placeholder="user" autocomplete="off">
+      </div>
+
+      <div class="modal-field">
+        <label>Senha (opcional)</label>
+        <input type="password" id="tab-config-proxy-pass" placeholder="password" autocomplete="new-password">
+      </div>
+
+      <div class="modal-hint">
+        ⚠ Credenciais salvas em localStorage (plain text). <strong>Fica no seu PC</strong>, mas se o PC for comprometido, ficam expostas. So pra multi-conta pessoal.
+      </div>
+
+      <div id="tab-config-location-info" class="modal-hint hidden">
+        <strong>Localizado:</strong> <span id="tab-config-location-text">—</span>
+      </div>
+
+      <div id="tab-config-error" class="modal-error hidden"></div>
+
+      <div class="modal-actions">
+        <button id="tab-config-clear" class="modal-btn modal-btn-secondary">Limpar proxy</button>
+        <button id="tab-config-locate" class="modal-btn modal-btn-secondary">📍 Localizar e teleportar</button>
+        <button id="tab-config-close" class="modal-btn modal-btn-primary">Salvar e fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: sensor remoto - UMA conexao global pra todas as abas -->
+  <div id="modal-remote-sensor" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-title">📡 Sensor remoto (global)</div>
+      <div class="modal-subtitle">Uma unica conexao - celular controla a orientacao de TODAS as abas simultaneamente.</div>
+
+      <div class="remote-sensor-url-box">
+        <div class="url-label">URL pro celular:</div>
+        <div id="remote-sensor-url-text" class="url-text">—</div>
+      </div>
+
+      <div class="remote-sensor-status-row">
+        <span>Status:</span>
+        <span id="remote-sensor-status" class="status-indicator-dot">⚪ Aguardando conexao</span>
+      </div>
+
+      <div class="remote-sensor-ips-info">
+        <strong>IPs disponiveis:</strong> <span id="remote-sensor-ips">—</span>
+      </div>
+
+      <div class="modal-hint">
+        <strong>Android/iOS:</strong> abre a URL, toca em <em>Autorizar sensor</em>. iOS exige toque na tela.<br>
+        <strong>Erro de SSL:</strong> toque em "Avançado" → "Prosseguir mesmo assim" (cert self-signed).<br>
+        <strong>Firewall:</strong> Windows pode pedir pra permitir o Electron. Click em <em>Permitir acesso</em>.
+      </div>
+
+      <div class="modal-actions">
+        <button id="modal-remote-sensor-close" class="modal-btn modal-btn-primary">Fechar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal: orientacao fisica do celular (3D preview + sliders) -->
   <div id="modal-orientation" class="modal-overlay hidden">
     <div class="modal modal-wide">
       <div class="modal-title">📱 Orientacao do celular</div>
       <div class="modal-subtitle">Arraste o celular pra girar em X/Y. Shift + arrastar gira o alpha (bussola). Isso afeta o <code>DeviceOrientationEvent</code> no site.</div>
+
+      <div id="phone-3d-mirror-badge" class="phone-3d-mirror-badge hidden">📡 Espelhando sensor remoto - mova o celular</div>
 
       <div class="phone-3d-wrap">
         <div class="phone-3d-stage">
@@ -205,6 +301,16 @@
         <span class="toggle-label">Alpha segue heading do GPS (bussola aponta pra direcao andada)</span>
       </div>
 
+      <div class="recorder-panel">
+        <div class="recorder-row">
+          <button id="ori-record-btn" class="modal-btn modal-btn-secondary">⏺ Gravar movimento</button>
+          <button id="ori-record-copy" class="modal-btn modal-btn-secondary hidden">📋 Copiar log</button>
+          <button id="ori-record-clear" class="modal-btn modal-btn-secondary hidden">Limpar</button>
+          <span id="ori-record-count" class="recorder-count"></span>
+        </div>
+        <textarea id="ori-record-log" class="recorder-log hidden" readonly placeholder="Log dos ticks de orientacao..."></textarea>
+      </div>
+
       <div class="modal-actions">
         <button id="modal-ori-reset" class="modal-btn modal-btn-secondary">Resetar</button>
         <button id="modal-ori-close" class="modal-btn modal-btn-primary">Fechar</button>
@@ -239,23 +345,6 @@
         <button id="modal-presets-reset" class="modal-btn modal-btn-secondary">Resetar default</button>
         <button id="modal-presets-cancel" class="modal-btn modal-btn-secondary">Cancelar</button>
         <button id="modal-presets-save" class="modal-btn modal-btn-primary">Salvar</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modal: ir para endereco/coordenadas -->
-  <div id="modal-goto" class="modal-overlay hidden">
-    <div class="modal">
-      <div class="modal-title">📍 Ir para...</div>
-      <div class="modal-subtitle">Digite um endereco (ex: <i>Av. Paulista 1578, Sao Paulo</i>) ou coordenadas (ex: <i>-23.5505, -46.6333</i>).</div>
-      <div class="modal-field">
-        <input type="text" id="goto-input" placeholder="endereco ou lat, lon" autocomplete="off">
-      </div>
-      <div id="goto-status" class="goto-status hidden"></div>
-      <div id="modal-goto-error" class="modal-error hidden"></div>
-      <div class="modal-actions">
-        <button id="modal-goto-cancel" class="modal-btn modal-btn-secondary">Cancelar</button>
-        <button id="modal-goto-go" class="modal-btn modal-btn-primary">Ir</button>
       </div>
     </div>
   </div>
@@ -298,7 +387,6 @@
       <div class="action-row">
         <button id="btn-pause" class="action-btn" title="Pausa o movimento sem perder a posicao">⏸ Pausar</button>
         <button id="btn-center" class="action-btn" title="Centralizar o mapa no marcador">🎯 Centralizar</button>
-        <button id="btn-goto" class="action-btn" title="Teletransportar pra um endereco ou coordenadas">📍 Ir para...</button>
         <button id="btn-lock" class="action-btn lock-locked" title="Bloqueia teleporte. Click destrava por 5s">🔒 Teleporte: BLOQUEADO</button>
         <button id="btn-orientation" class="action-btn" title="Simular orientacao fisica do celular (acelerometro/bussola)">📱 Orientacao</button>
         <button id="btn-cancel-route" class="action-btn hidden" title="Cancelar rota automatica">✕ Cancelar rota</button>

@@ -81,6 +81,150 @@
       background: rgba(255,255,255,0.08); padding: 1px 4px;
       border-radius: 3px; font-size: 11px;
     }
+    .tab-config {
+      margin-top: 8px;
+      padding: 10px;
+      background: var(--panel);
+      border-radius: 6px;
+    }
+    .tab-config label {
+      display: block;
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .tab-config input {
+      width: 100%;
+      padding: 6px 8px;
+      background: var(--bg);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: 'Consolas', monospace;
+      font-size: 12px;
+      outline: none;
+    }
+    .tab-config input:focus { border-color: var(--accent); }
+    .tab-config .hint {
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+    .perms-panel {
+      margin-top: 8px;
+      padding: 10px;
+      background: var(--panel);
+      border-radius: 6px;
+    }
+    .perms-title {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .perms-refresh {
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.1);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: inherit;
+    }
+    .perms-refresh:hover { color: var(--text); border-color: var(--text); }
+    .perm-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 0;
+      font-size: 12px;
+    }
+    .perm-icon { font-size: 14px; width: 18px; text-align: center; }
+    .perm-name { flex: 1; }
+    .perm-state {
+      font-family: 'Consolas', monospace;
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 3px;
+      background: rgba(255,255,255,0.05);
+      color: var(--muted);
+    }
+    .perm-state.granted { color: var(--ok); background: rgba(15,157,88,0.1); }
+    .perm-state.denied { color: var(--err); background: rgba(229,57,53,0.1); }
+    .perm-state.prompt { color: var(--warn); background: rgba(249,171,0,0.1); }
+    .perm-section-label {
+      font-size: 10px;
+      color: var(--muted);
+      margin: 6px 0 2px;
+      font-weight: 600;
+    }
+    .perm-help {
+      font-size: 10px;
+      color: var(--muted);
+      padding: 6px;
+      background: rgba(26,115,232,0.08);
+      border-left: 2px solid var(--accent);
+      border-radius: 3px;
+      margin-top: 8px;
+      line-height: 1.4;
+      display: none;
+    }
+    .perm-help.open { display: block; }
+    .perm-help-toggle {
+      font-size: 10px;
+      color: var(--accent);
+      cursor: pointer;
+      text-align: center;
+      margin-top: 6px;
+    }
+    /* Status do servidor */
+    .srv-status {
+      margin-top: 8px;
+      padding: 10px;
+      background: var(--panel);
+      border-radius: 6px;
+      font-size: 12px;
+    }
+    .srv-status-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 3px 0;
+    }
+    .srv-status-row .k { color: var(--muted); font-size: 11px; }
+    .srv-status-row .v { font-family: 'Consolas', monospace; font-size: 11px; }
+    .srv-status.online { border-left: 3px solid var(--ok); }
+    .srv-status.offline { border-left: 3px solid var(--err); }
+    .srv-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      display: inline-block; margin-right: 6px;
+      background: var(--muted);
+    }
+    .srv-dot.on { background: var(--ok); box-shadow: 0 0 4px var(--ok); }
+    .srv-dot.off { background: var(--err); }
+    .srv-presets {
+      display: flex;
+      gap: 4px;
+      margin-top: 6px;
+      flex-wrap: wrap;
+    }
+    .srv-preset-btn {
+      font-size: 10px;
+      padding: 3px 8px;
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.1);
+      color: var(--muted);
+      border-radius: 3px;
+      cursor: pointer;
+      font-family: 'Consolas', monospace;
+    }
+    .srv-preset-btn:hover { color: var(--accent); border-color: var(--accent); }
   </style>
 </head>
 <body>
@@ -98,7 +242,95 @@
     <div class="row"><span class="label">Lon:</span>
       <span class="value" id="lon">-</span></div>
     <div class="row"><span class="label">Versao:</span>
-      <span class="value">0.1.12</span></div>
+      <span class="value">0.1.14</span></div>
+  </div>
+
+  <div class="tab-config">
+    <label for="serverIpInput">IP do servidor (opcional)</label>
+    <input type="text" id="serverIpInput" placeholder="ex: 192.168.0.2" maxlength="40">
+    <div class="srv-presets">
+      <button class="srv-preset-btn" data-ip="">127.0.0.1</button>
+      <button class="srv-preset-btn" data-ip="192.168.0.2">192.168.0.2</button>
+      <button class="srv-preset-btn" data-ip="192.168.1.1">192.168.1.1</button>
+      <button class="srv-preset-btn" data-ip="10.0.0.1">10.0.0.1</button>
+    </div>
+    <div class="hint">
+      Vazio = usa <code>127.0.0.1</code> (PC desktop).<br>
+      No celular: IP do PC na WiFi (ex: <code>192.168.X.X</code>).<br>
+      Botões acima: preenchimento rápido.
+    </div>
+  </div>
+
+  <div class="srv-status" id="srvStatus">
+    <div class="srv-status-row">
+      <span class="k"><span class="srv-dot" id="srvDot"></span>Servidor</span>
+      <span class="v" id="srvEndpoint">—</span>
+    </div>
+    <div class="srv-status-row">
+      <span class="k">Versao</span>
+      <span class="v" id="srvVersion">—</span>
+    </div>
+    <div class="srv-status-row">
+      <span class="k">Abas detectadas</span>
+      <span class="v" id="srvTabsCount">—</span>
+    </div>
+  </div>
+
+  <div class="tab-config">
+    <label for="tabIdSelect">Aba (multi-conta)</label>
+    <select id="tabIdSelect" style="width:100%; padding:6px 8px; background:var(--bg); border:1px solid rgba(255,255,255,0.1); border-radius:4px; color:var(--text); font-family:'Consolas', monospace; font-size:12px; outline:none;">
+      <option value="">Carregando...</option>
+    </select>
+    <button id="refreshTabsBtn" style="margin-top: 6px; width: 100%; padding: 4px 8px; background: transparent; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: var(--muted); cursor: pointer; font-size: 11px; font-family: inherit;">↻ Atualizar lista</button>
+    <div class="hint">
+      Vazio = usa a aba ativa do Fake GPS (default).<br>
+      🌐 = aba tem proxy configurada.
+    </div>
+  </div>
+
+  <div class="perms-panel">
+    <div class="perms-title">
+      <span>Permissoes do site</span>
+      <button id="permsRefresh" class="perms-refresh">↻ Verificar</button>
+    </div>
+
+    <div class="perm-section-label">Obrigatorias</div>
+    <div class="perm-row">
+      <span class="perm-icon">🌐</span>
+      <span class="perm-name">Localizacao</span>
+      <span class="perm-state" id="perm-geolocation">—</span>
+    </div>
+    <div class="perm-row">
+      <span class="perm-icon">🎯</span>
+      <span class="perm-name">Giroscopio</span>
+      <span class="perm-state" id="perm-gyroscope">—</span>
+    </div>
+    <div class="perm-row">
+      <span class="perm-icon">🏃</span>
+      <span class="perm-name">Acelerometro</span>
+      <span class="perm-state" id="perm-accelerometer">—</span>
+    </div>
+    <div class="perm-row" title="Nome exato depende do browser - verifique manual no cadeado 🔒">
+      <span class="perm-icon">📱</span>
+      <span class="perm-name">Apps do dispositivo</span>
+      <span class="perm-state" id="perm-apps">manual</span>
+    </div>
+
+    <div class="perm-section-label">Opcional (anti-deteccao)</div>
+    <div class="perm-row">
+      <span class="perm-icon">🧭</span>
+      <span class="perm-name">Magnetometro</span>
+      <span class="perm-state" id="perm-magnetometer">—</span>
+    </div>
+
+    <div id="permsHelpToggle" class="perm-help-toggle">❓ Como autorizar as permissoes</div>
+    <div id="permsHelp" class="perm-help">
+      Toque no cadeado 🔒 (ou "i") a esquerda da URL<br>
+      → "Permissoes" ou "Configuracoes do site"<br>
+      → Mude cada permissao pra "Permitir"<br>
+      → Recarregue a pagina depois<br><br>
+      <b>"Apps do dispositivo"</b> esta em "Site settings" / "Configuracoes do site" - habilita manual se o site pedir.
+    </div>
   </div>
 
   <div class="help">

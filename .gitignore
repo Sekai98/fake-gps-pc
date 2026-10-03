@@ -24,6 +24,9 @@ android-apk/app/build/
 android-apk/local.properties
 android-apk/*.iml
 
+# Artifacts
+poc-extension.zip
+
 # OS
 desktop.ini
 

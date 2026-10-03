@@ -56,10 +56,35 @@ body { display: flex; flex-direction: column; }
   background: var(--ok);
   box-shadow: 0 0 8px var(--ok);
 }
-.status { font-size: 12px; display: flex; align-items: center; gap: 6px; }
+.status { font-size: 12px; display: flex; align-items: center; gap: 10px; }
 .status-label { color: var(--muted); }
 .status-value { color: var(--ok); font-weight: 600; transition: color 0.2s ease; }
 .status-value.paused { color: var(--warn); }
+
+/* Botao de sensor remoto no header */
+.header-remote-sensor {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+.header-remote-sensor:hover { background: rgba(255,255,255,0.05); color: var(--text); border-color: var(--text); }
+.header-remote-sensor .rs-icon { font-size: 14px; }
+.header-remote-sensor .rs-label { color: var(--muted); }
+.header-remote-sensor .rs-state { font-weight: 600; color: var(--muted); }
+.header-remote-sensor.active {
+  border-color: var(--ok);
+  background: rgba(15,157,88,0.1);
+}
+.header-remote-sensor.active .rs-state { color: var(--ok); text-shadow: 0 0 6px rgba(15,157,88,0.5); }
 .status-hint { color: var(--muted); font-size: 11px; margin-left: 4px; }
 .settings-btn {
   background: transparent;
@@ -329,6 +354,23 @@ body { display: flex; flex-direction: column; }
   line-height: 1;
 }
 .tab-close:hover { opacity: 1; color: var(--err); background: rgba(229,57,53,0.1); }
+.tab-config-btn {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 11px;
+  opacity: 0.5;
+  border-radius: 2px;
+  line-height: 1;
+}
+.tab-config-btn:hover { opacity: 1; color: var(--accent); background: rgba(26,115,232,0.1); }
+.tab-proxy-icon {
+  font-size: 10px;
+  opacity: 0.8;
+  margin-left: 2px;
+}
 .tab-add {
   display: flex;
   align-items: center;
@@ -749,11 +791,177 @@ body { display: flex; flex-direction: column; }
 .toggle-switch input:checked + .toggle-slider { background: var(--accent); }
 .toggle-switch input:checked + .toggle-slider:before { transform: translateX(20px); }
 
+/* ---- Modal sensor remoto (lista por aba) ---- */
+.remote-sensor-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.remote-sensor-tab-row {
+  padding: 10px 12px;
+  background: var(--panel-dark);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.remote-sensor-tab-row.active-tab { border-color: var(--accent); background: rgba(26,115,232,0.05); }
+.remote-sensor-tab-row.connected { border-color: var(--ok); }
+.remote-sensor-tab-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.remote-sensor-tab-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text);
+}
+.remote-sensor-tab-active-badge {
+  font-size: 9px;
+  color: var(--accent);
+  background: rgba(26,115,232,0.15);
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-left: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.remote-sensor-tab-status {
+  font-size: 11px;
+  font-family: Consolas, monospace;
+  color: var(--muted);
+}
+.remote-sensor-tab-status.on { color: var(--ok); text-shadow: 0 0 4px rgba(15,157,88,0.4); }
+.remote-sensor-tab-url {
+  font-family: Consolas, monospace;
+  font-size: 11px;
+  color: var(--accent);
+  word-break: break-all;
+  user-select: all;
+  cursor: text;
+  padding: 6px 8px;
+  background: rgba(26,115,232,0.08);
+  border-radius: 3px;
+}
+.remote-sensor-ips-info {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 8px 12px;
+  background: var(--panel-dark);
+  border-radius: 4px;
+  margin-bottom: 10px;
+}
+.remote-sensor-ips-info strong { color: var(--text); }
+
+/* URL unica + status global */
+.remote-sensor-url-box {
+  background: var(--panel-dark);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin: 14px 0 10px;
+}
+.remote-sensor-url-box .url-label {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+.remote-sensor-url-box .url-text {
+  font-family: Consolas, monospace;
+  font-size: 15px;
+  color: var(--accent);
+  word-break: break-all;
+  user-select: all;
+  cursor: text;
+}
+.remote-sensor-status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--panel-dark);
+  border-radius: 4px;
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+.remote-sensor-status-row span:first-child { color: var(--muted); }
+.status-indicator-dot { font-family: Consolas, monospace; }
+.status-indicator-dot.connected { color: var(--ok); text-shadow: 0 0 4px rgba(15,157,88,0.4); }
+.modal-hint {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.5;
+  padding: 10px 12px;
+  background: rgba(255, 193, 7, 0.08);
+  border-left: 3px solid #ffc107;
+  border-radius: 3px;
+  margin-bottom: 10px;
+}
+.modal-hint strong { color: var(--text); }
+
 /* ---- Preview 3D de orientacao do celular ---- */
 .phone-3d-wrap {
   display: flex;
   justify-content: center;
   padding: 20px 10px 10px;
+}
+.phone-3d-mirror-badge {
+  background: rgba(76,175,80,0.1);
+  color: #4caf50;
+  border: 1px solid rgba(76,175,80,0.3);
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 11px;
+  text-align: center;
+  margin-top: 8px;
+  font-weight: 500;
+}
+
+/* Gravador de orientacao */
+.recorder-panel {
+  margin-top: 10px;
+  padding: 10px;
+  background: var(--panel-dark);
+  border-radius: 6px;
+}
+.recorder-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.recorder-count {
+  font-family: 'Consolas', monospace;
+  font-size: 11px;
+  color: var(--muted);
+  margin-left: auto;
+}
+.recorder-log {
+  margin-top: 8px;
+  width: 100%;
+  height: 160px;
+  background: #0a0d12;
+  color: #c0c4cc;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: 'Consolas', monospace;
+  font-size: 11px;
+  padding: 8px;
+  resize: vertical;
+}
+#ori-record-btn.recording {
+  background: var(--err);
+  color: white;
+  animation: pulse 1s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
 }
 .phone-3d-stage {
   perspective: 700px;
@@ -771,7 +979,7 @@ body { display: flex; flex-direction: column; }
   cursor: grab;
   user-select: none;
   will-change: transform;
-  transition: transform 0.03s linear;
+  transition: transform 0.15s ease-out;
 }
 .phone-3d.dragging { transition: none; }
 .phone-3d.dragging { cursor: grabbing; }

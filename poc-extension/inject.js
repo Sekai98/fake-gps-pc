@@ -1,6 +1,10 @@
 (function () {
   'use strict';
 
+  // Captura UA ORIGINAL antes de qualquer patch pra detectar se roda em mobile real
+  const ORIGINAL_UA = navigator.userAgent;
+  const IS_MOBILE_BROWSER = /Mobile|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ORIGINAL_UA);
+
   // --- MOBILE EMULATION (gocollect.fun) ---
   // Aplicado em document_start, antes do site renderizar.
   // Faz o site "achar" que esta num Android Pixel 8 Pro (UA, platform, touch, viewport).
@@ -206,7 +210,8 @@
   }
 
   // Aplica somente em gocollect.fun. Outros sites ficam intactos.
-  if (location.hostname && location.hostname.indexOf('gocollect.fun') !== -1) {
+  // Pula se ja estamos num browser mobile real (nao precisa emular - os checks ja passam).
+  if (location.hostname && location.hostname.indexOf('gocollect.fun') !== -1 && !IS_MOBILE_BROWSER) {
     applyMobileEmulation();
   }
 
@@ -230,8 +235,11 @@
   // (localizacao real do SO). Controlado pelo botao do popup via content.js.
   let overrideEnabled = true;
 
-  // Motion sensors sinteticos - usam CURRENT.speedMps + heading via closure
-  if (location.hostname && location.hostname.indexOf('gocollect.fun') !== -1) {
+  // Motion sensors sinteticos - usam CURRENT.speedMps + heading via closure.
+  // IMPORTANTE: so no DESKTOP. No mobile real, o sensor nativo (bussola, acelerometro)
+  // precisa funcionar normalmente - nossa dispatch sintetica a 60Hz competia com ele
+  // e dominava, impedindo o celular de controlar a bussola do site.
+  if (location.hostname && location.hostname.indexOf('gocollect.fun') !== -1 && !IS_MOBILE_BROWSER) {
     applyMotionSensorEmulation(
       function () { return { speedMps: CURRENT.speedMps, heading: CURRENT.heading }; },
       function () { return overrideEnabled; }
@@ -424,7 +432,7 @@
       get target() { return { lat: CURRENT.lat, lon: CURRENT.lon }; },
       get dynamic() { return (Date.now() - LAST_UPDATE_TS) < 2000; },
       get speedMps() { return CURRENT.speedMps; },
-      version: '0.1.12'
+      version: '0.1.14'
     };
   } catch (e) { /* silencio */ }
 

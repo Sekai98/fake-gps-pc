@@ -144,6 +144,29 @@
       return true;
     }
 
+    // v0.1.14: config de proxy por aba (ip, port, lat, lon, locationLabel)
+    function updateProxy(id, proxy) {
+      const tab = get(id);
+      if (!tab) return false;
+      if (proxy && typeof proxy === 'object' && proxy.ip) {
+        tab.proxy = {
+          ip: String(proxy.ip).trim(),
+          port: proxy.port ? String(proxy.port).trim() : '',
+          user: proxy.user ? String(proxy.user) : '',
+          password: proxy.password ? String(proxy.password) : '',
+          lat: typeof proxy.lat === 'number' ? proxy.lat : null,
+          lon: typeof proxy.lon === 'number' ? proxy.lon : null,
+          locationLabel: proxy.locationLabel || '',
+          locatedAt: proxy.locatedAt || null
+        };
+      } else {
+        delete tab.proxy;
+      }
+      saveList();
+      emit('change');
+      return true;
+    }
+
     // Helper pra criar keys namespaced
     function storageKey(id, suffix) {
       return 'fake-gps-pc:' + id + ':' + suffix;
@@ -171,6 +194,7 @@
       remove: remove,
       rename: rename,
       switchTo: switchTo,
+      updateProxy: updateProxy,
       storageKey: storageKey,
       on: on
     };

@@ -11,5 +11,14 @@ contextBridge.exposeInMainWorld('FakeGPSBridge', {
     ipcRenderer.on('fake-gps:crates', function (_evt, payload) {
       try { cb(payload); } catch (e) { /* silencio */ }
     });
+  },
+  // v0.1.13: IPs locais da LAN (pra celular remoto conectar via /sensor)
+  getLocalIps: function () {
+    try { return ipcRenderer.invoke('fake-gps:get-local-ips'); }
+    catch (e) { return Promise.resolve({ port: 3477, ips: [] }); }
+  },
+  // v0.1.14: publica lista de abas pra extension listar no dropdown
+  publishTabsList: function (tabs) {
+    try { ipcRenderer.send('fake-gps:update-tabs', tabs); } catch (e) {}
   }
 });

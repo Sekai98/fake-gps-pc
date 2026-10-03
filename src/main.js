@@ -1,9 +1,16 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, powerSaveBlocker } = require('electron');
 const path = require('path');
 const Server = require('./server');
 
+// Chromium bloqueia background windows por default - desabilita antes mesmo
+// de criar o renderer pra garantir que o flag pegue
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+
 let serverInfo = null;
 let mainWin = null;
+let powerSaveBlockerId = null;
 
 function createWindow() {
   mainWin = new BrowserWindow({
@@ -11,14 +18,18 @@ function createWindow() {
     height: 800,
     minWidth: 980,
     minHeight: 640,
-    title: 'Fake GPS PC v0.1.12',
+    title: 'Fake GPS PC v0.1.14',
     backgroundColor: '#0f1419',
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: false
+      sandbox: false,
+      // Chrome throttles rAF/setInterval em janelas minimizadas/background.
+      // Desligar isso faz o tick loop e publishLocation continuarem a 60Hz/10Hz
+      // mesmo com outro app por cima.
+      backgroundThrottling: false
     }
   });
 
@@ -37,12 +48,39 @@ ipcMain.on('fake-gps:update', (event, loc) => {
   Server.updateLocation(loc);
 });
 
+// v0.1.14: Renderer publica lista de abas (pra extension listar no dropdown)
+ipcMain.on('fake-gps:update-tabs', (event, tabs) => {
+  Server.updateTabsList(tabs);
+});
+
+// Renderer pergunta quais IPs da LAN sao usaveis pra celular conectar
+ipcMain.handle('fake-gps:get-local-ips', () => {
+  try {
+    return {
+      port: serverInfo ? serverInfo.port : 3477,
+      httpsPort: serverInfo ? serverInfo.httpsPort : null,
+      ips: Server.getLocalIps()
+    };
+  } catch (e) {
+    return { port: 3477, httpsPort: null, ips: [] };
+  }
+});
+
 app.whenReady().then(async () => {
   try {
     serverInfo = await Server.start();
     console.log('[main] HTTP server up on port', serverInfo.port);
   } catch (err) {
     console.error('[main] failed to start HTTP server:', err.message);
+  }
+  // Previne Windows/macOS de suspender o processo. Essencial pra fake GPS
+  // continuar atualizando posicao mesmo quando janela minimizada ou outro
+  // app em tela cheia.
+  try {
+    powerSaveBlockerId = powerSaveBlocker.start('prevent-app-suspension');
+    console.log('[main] powerSaveBlocker ativo (id=' + powerSaveBlockerId + ')');
+  } catch (e) {
+    console.warn('[main] powerSaveBlocker falhou:', e.message);
   }
   // Quando o server receber crates da extension, repassa pro renderer
   Server.setOnCrates((payload) => {
@@ -54,6 +92,10 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
+  if (powerSaveBlockerId !== null) {
+    try { powerSaveBlocker.stop(powerSaveBlockerId); } catch (e) {}
+    powerSaveBlockerId = null;
+  }
   if (process.platform !== 'darwin') app.quit();
 });
 

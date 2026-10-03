@@ -1,7 +1,7 @@
 {
   "name": "fake-gps-pc",
-  "version": "0.1.0",
-  "description": "Fake GPS para PC com joystick virtual - standalone (v0.1.0)",
+  "version": "0.1.13",
+  "description": "Fake GPS para PC com joystick virtual + sensor remoto + multi-abas",
   "main": "src/main.js",
   "private": true,
   "scripts": {
@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "leaflet": "^1.9.4",
-    "nipplejs": "^0.10.2"
+    "nipplejs": "^0.10.2",
+    "selfsigned": "^2.4.1"
   },
   "devDependencies": {
     "electron": "^30.0.0"
