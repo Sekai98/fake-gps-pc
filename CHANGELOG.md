@@ -2,6 +2,47 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
+## [0.1.26] - 2026-10-03 (Electron) - Fix REAL REAL do step: 1km (descoberta: beacon.seenWithinM = 800m)
+
+### Fixed
+- **Bug principal (confirmado por descoberta no bundle)**: a visibilidade real dos lures é bem menor do que achávamos:
+  - `beacon.seenWithinM = 800m` (não ~2km)
+  - `gold_rush.seenWithinM = 1500m`
+- Nosso grid com step 2km (v0.1.25) tinha gaps de √2 × 1km = **1414m** entre pontos. Isso é MAIOR que a visibilidade do beacon (800m), então **beacons genuinamente escapavam**.
+- Fix: step default `1.0km` em `buildScanGrid`. Garante que o maior gap seja √2 × 500m ≈ **707m < 800m** → beacons nunca escapam.
+- Margem de borda reduzida pra 1.5km (igual seenWithinM do gold_rush, suficiente pra cobrir borda).
+
+### Changed
+- `scanRegion` default `stepKm`: 2.0 → **1.0**
+- `main.js` chama `scanRegion` com `stepKm: 1.0`
+- `estimatedCalls` recalibrado: `π * (r + 1.5)²` (step² = 1)
+  - Scan 10km: 55 → **~250**
+  - Scan 20km: 210 → **~1150**
+  - Scan 30km: 400 → **~3100**
+  - Scan 100km: ~5000 → **~32000**
+- **~4x mais chamadas pelo mesmo raio**, mas lure NUNCA mais escapa
+
+### Why this is the final fix
+As versões anteriores (v0.1.23, v0.1.25) tentaram adivinhar o raio de cobertura por chamada (achamos ser ~2km). Agora temos a CONSTANTE REAL do jogo (lida do bundle minificado):
+```js
+beacon:    { seenWithinM: 800,  ... }
+gold_rush: { seenWithinM: 1500, ... }
+```
+Isso é a verdade dos servidores. Impossível um lure dentro do raio não aparecer com step 1km.
+
+### Side-info descoberta no bundle (não implementada ainda)
+- Beacon dura 30min, gera 6 crates, custa $2 pra acender, 30% chance de card graded
+- Gold rush dura 20min, gera 5 crates, custa $32, **100% chance de card graded** (muito mais valioso)
+- Config de tiers de valor: common $13-30 (75%), plus $30-55 (20%), big $55-125 (4%), chase $125+ (1%)
+- Campo `beaconBlock` existe no payload de alguns endpoints → **slot da Solana onde beacon foi aceso** (link solscan.io/block/X). Potencial vetor on-chain pra tracking.
+
+### Files
+- EDIT `src/gocollect-api.js` (step 2.0 → 1.0, margem 2.5 → 1.5, comentário explicando descoberta)
+- EDIT `src/main.js` (stepKm: 1.0)
+- EDIT `src/renderer/app.js` (estimatedCalls recalibrado)
+- EDIT `src/renderer/index.html` (v0.1.26)
+- EDIT `package.json` + `poc-extension/manifest.json` (0.1.25 → 0.1.26, simetria)
+
 ## [0.1.25] - 2026-10-03 (Electron) - Fix REAL do bug "lure escapa do scan" (margem de borda + step 2km)
 
 ### Fixed

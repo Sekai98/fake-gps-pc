@@ -123,13 +123,13 @@ function extractNearbyLures(apiResponse, fromLat, fromLng) {
  * Step em km (default 3) - cada chamada cobre raio ~2km, step 3km da overlap seguro.
  */
 function buildScanGrid(centerLat, centerLng, radiusKm, stepKm) {
-  // v0.1.25: step 2.0km (antes 2.5) + margem de borda +2.5km. Garante que:
-  //  1. Nenhum ponto interno fica sem cobertura (step 2km + raio chamada ~2km = overlap seguro)
-  //  2. Borda do círculo é coberta por pontos "fora" do raio visual (necessário porque
-  //     uma chamada em (R, 0) só cobre até distância 2km de si mesma; pontos VIZINHOS
-  //     fora do raio é que cobrem a borda interna)
-  const step = typeof stepKm === 'number' ? stepKm : 2.0;
-  const marginKm = 2.5;  // raio da chamada (~2km) + half-step (overlap seguro)
+  // v0.1.26: step 1.0km. Descoberto no bundle do site que beacon.seenWithinM = 800m
+  // (NÃO ~2km como achávamos). Pra pegar TODOS os beacons sem buraco:
+  // step máximo = seenWithinM * √2 ≈ 1130m. Usamos 1km pra segurança.
+  // Gold rush tem seenWithinM = 1500m (menos restritivo); mas step precisa ser menor
+  // pra pegar ambos.
+  const step = typeof stepKm === 'number' ? stepKm : 1.0;
+  const marginKm = 1.5;  // margem = seenWithinM máximo (gold_rush 1500m) + step/2
   const expandedKm = radiusKm + marginKm;
   const latDegPerKm = 1 / 111;
   const lngDegPerKm = 1 / (111 * Math.cos(centerLat * Math.PI / 180));
@@ -168,7 +168,7 @@ function sleep(ms) {
 async function scanRegion(token, centerLat, centerLng, radiusKm, opts) {
   opts = opts || {};
   const pacingMs = typeof opts.pacingMs === 'number' ? opts.pacingMs : 600;
-  const stepKm = typeof opts.stepKm === 'number' ? opts.stepKm : 2.0;
+  const stepKm = typeof opts.stepKm === 'number' ? opts.stepKm : 1.0;
   const concurrency = Math.max(1, Math.min(10, typeof opts.concurrency === 'number' ? opts.concurrency : 1));
   const onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : null;
   const shouldCancel = typeof opts.shouldCancel === 'function' ? opts.shouldCancel : null;

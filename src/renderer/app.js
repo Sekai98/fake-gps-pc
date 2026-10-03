@@ -1807,9 +1807,9 @@
     function currentPacing() { return Math.max(100, Math.min(5000, parseInt(pacingInput.value, 10) || 600)); }
     function currentParall() { return Math.max(1, Math.min(10, parseInt(parallInput.value, 10) || 1)); }
     function estimatedCalls(r) {
-      // v0.1.25: grid step 2km + margem 2.5km (área expandida)
-      const expanded = r + 2.5;
-      return Math.max(1, Math.round(Math.PI * expanded * expanded / 4));
+      // v0.1.26: step 1km + margem 1.5km. Área expandida = π*(r+1.5)² / 1 (step² = 1)
+      const expanded = r + 1.5;
+      return Math.max(1, Math.round(Math.PI * expanded * expanded));
     }
     function fmtSeconds(s) {
       if (s < 60) return '~' + s + 's';
