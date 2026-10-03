@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, powerSaveBlocker } = require('electron');
+const { app, BrowserWindow, ipcMain, powerSaveBlocker, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const Server = require('./server');
@@ -222,6 +222,80 @@ Server.setOnGocollectToken((token) => {
       hasToken: true,
       tokenPreview: token.slice(0, 6) + '...' + token.slice(-4)
     });
+  }
+});
+
+// --- v0.1.27: Logger de investigação ---
+
+function gcDebugLogPath() {
+  return path.join(app.getPath('userData'), 'gocollect-debug.jsonl');
+}
+
+let gcDebugCount = 0;
+function readGcDebugCount() {
+  try {
+    const data = fs.readFileSync(gcDebugLogPath(), 'utf8');
+    return data.split('\n').filter(l => l.trim().length > 0).length;
+  } catch (e) { return 0; }
+}
+gcDebugCount = readGcDebugCount();
+
+Server.setOnGcDebugLog((entry) => {
+  try {
+    fs.appendFileSync(gcDebugLogPath(), JSON.stringify(entry) + '\n', 'utf8');
+    gcDebugCount++;
+    if (mainWin && !mainWin.isDestroyed()) {
+      mainWin.webContents.send('gc-debug:count', gcDebugCount);
+    }
+  } catch (e) { console.warn('[gc-debug] append err:', e.message); }
+});
+
+ipcMain.handle('gc-debug:toggle', (_evt, enabled) => {
+  Server.setGcDebugEnabled(!!enabled);
+  return { ok: true, enabled: !!enabled };
+});
+
+ipcMain.handle('gc-debug:get-status', () => {
+  return { count: gcDebugCount, path: gcDebugLogPath() };
+});
+
+ipcMain.handle('gc-debug:open-folder', () => {
+  try { shell.showItemInFolder(gcDebugLogPath()); return { ok: true }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('gc-debug:clear', () => {
+  try {
+    fs.writeFileSync(gcDebugLogPath(), '', 'utf8');
+    gcDebugCount = 0;
+    if (mainWin && !mainWin.isDestroyed()) {
+      mainWin.webContents.send('gc-debug:count', 0);
+    }
+    return { ok: true };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('gc-debug:test-challenge', async (_evt, crateId) => {
+  const token = readGocollectToken();
+  if (!token) return { ok: false, error: 'no-token' };
+  if (!crateId || typeof crateId !== 'string') return { ok: false, error: 'bad-crateId' };
+  try {
+    const result = await GocollectAPI.fetchOpenChallenge(token, crateId, null);
+    // Loga automaticamente mesmo se logger desligado (teste manual explícito)
+    try {
+      fs.appendFileSync(gcDebugLogPath(), JSON.stringify({
+        t: Date.now(),
+        type: 'manual-test-challenge',
+        crateId: crateId,
+        status: result.status,
+        resBody: typeof result.body === 'string' ? result.body.slice(0, 20000) : JSON.stringify(result.body).slice(0, 20000)
+      }) + '\n', 'utf8');
+      gcDebugCount++;
+      if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send('gc-debug:count', gcDebugCount);
+    } catch (e) {}
+    return { ok: true, status: result.status, body: result.body };
+  } catch (e) {
+    return { ok: false, error: e.message };
   }
 });
 

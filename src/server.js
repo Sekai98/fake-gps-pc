@@ -75,6 +75,12 @@ function setOnCrates(fn) { onCratesCallback = (typeof fn === 'function') ? fn : 
 let onGocollectTokenCallback = null;
 function setOnGocollectToken(fn) { onGocollectTokenCallback = (typeof fn === 'function') ? fn : null; }
 
+// v0.1.27: Callback de debug log + flag se tá ligado
+let onGcDebugLogCallback = null;
+let gcDebugEnabled = false;
+function setOnGcDebugLog(fn) { onGcDebugLogCallback = (typeof fn === 'function') ? fn : null; }
+function setGcDebugEnabled(on) { gcDebugEnabled = !!on; }
+
 // Lista de abas publicada pelo renderer (v0.1.14 - pra extension listar no dropdown)
 let currentTabsList = [];
 function updateTabsList(tabs) {
@@ -318,6 +324,27 @@ function handler(req, res) {
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true, count: data && data.crates ? data.crates.length : 0 }));
+    }).catch(function (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: err.message }));
+    });
+    return;
+  }
+
+  // v0.1.27: Extension loga chamadas /v1/* do gocollect quando logger está ligado.
+  if (req.method === 'POST' && req.url === '/gc-debug-log') {
+    if (!gcDebugEnabled) {
+      // Silenciosamente aceita e descarta (extension sempre manda; main só grava se ligado)
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, logged: false }));
+      return;
+    }
+    readJsonBody(req).then(function (entry) {
+      if (entry && typeof entry.url === 'string' && onGcDebugLogCallback) {
+        onGcDebugLogCallback(entry);
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, logged: true }));
     }).catch(function (err) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: false, error: err.message }));
@@ -606,6 +633,8 @@ module.exports = {
   updateLocation: updateLocation,
   setOnCrates: setOnCrates,
   setOnGocollectToken: setOnGocollectToken,
+  setOnGcDebugLog: setOnGcDebugLog,
+  setGcDebugEnabled: setGcDebugEnabled,
   getLocalIps: getLocalIps,
   updateTabsList: updateTabsList
 };

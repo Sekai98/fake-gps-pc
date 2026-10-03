@@ -288,13 +288,18 @@
 
   if (nativeFetch) {
     window.fetch = async function (input, init) {
-      // Captura token Bearer em requests pra gocollect.fun (antes do fetch nativo).
       // Resolve URL relativa (ex: '/v1/crates') contra location.href pra pegar o host atual.
+      let fullUrl = '';
       try {
         const url = requestUrl(input);
-        let fullUrl = '';
-        try { fullUrl = new URL(url || '', location.href).href; } catch (e) {}
-        if (fullUrl.indexOf('gocollect.fun') !== -1) {
+        fullUrl = new URL(url || '', location.href).href;
+      } catch (e) {}
+      const isGC = fullUrl.indexOf('gocollect.fun') !== -1;
+      const isV1 = isGC && fullUrl.indexOf('/v1/') !== -1;
+
+      // Captura token Bearer em requests pra gocollect.fun (antes do fetch nativo).
+      if (isGC) {
+        try {
           const token = extractBearerFromInit(input, init);
           if (token && token !== lastCapturedToken) {
             lastCapturedToken = token;
@@ -304,24 +309,52 @@
               ts: Date.now()
             }, '*');
           }
-        }
-      } catch (e) { /* silencio */ }
+        } catch (e) { /* silencio */ }
+      }
+
+      // v0.1.27: captura PRE-request body pra logger de investigação
+      let reqBodyStr = null;
+      if (isV1 && init && init.body) {
+        try {
+          reqBodyStr = typeof init.body === 'string' ? init.body : null;
+        } catch (e) {}
+      }
+      const reqMethod = (init && init.method) || (input && input.method) || 'GET';
+      const reqTs = Date.now();
 
       const resp = await nativeFetch(input, init);
       try {
         const ct = resp.headers.get('content-type') || '';
-        if (ct.indexOf('application/json') !== -1) {
+        const isJson = ct.indexOf('application/json') !== -1;
+        if (isJson) {
           // Clona pra nao consumir o body original
           const clone = resp.clone();
-          clone.json().then(function (data) {
-            if (data && Array.isArray(data.crates)) {
+          clone.text().then(function (bodyStr) {
+            // v0.1.27: debug log de toda chamada /v1/* (content.js decide se logga baseado em flag)
+            if (isV1) {
               window.postMessage({
-                __fakegps_crates: true,
-                crates: data.crates,
-                lures: Array.isArray(data.lures) ? data.lures : [],
-                ts: Date.now()
+                __fakegps_gc_debug: true,
+                reqTs: reqTs,
+                resTs: Date.now(),
+                url: fullUrl,
+                method: reqMethod,
+                reqBody: reqBodyStr,
+                status: resp.status,
+                resBody: bodyStr.slice(0, 20000) // cap em 20KB por entry
               }, '*');
             }
+            // Captura legada de crates (comportamento existente)
+            try {
+              const data = JSON.parse(bodyStr);
+              if (data && Array.isArray(data.crates)) {
+                window.postMessage({
+                  __fakegps_crates: true,
+                  crates: data.crates,
+                  lures: Array.isArray(data.lures) ? data.lures : [],
+                  ts: Date.now()
+                }, '*');
+              }
+            } catch (e) {}
           }).catch(function () { /* nao-json valido, ignora */ });
         }
       } catch (e) { /* silencio: nao interfere no fetch do site */ }

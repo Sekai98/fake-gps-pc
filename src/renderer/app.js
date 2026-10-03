@@ -2283,6 +2283,74 @@
     });
   })();
 
+  // ===== v0.1.27: Painel de investigação =====
+  (function initGcDebugPanel() {
+    const bridge = window.FakeGPSBridge && window.FakeGPSBridge.gocollect;
+    if (!bridge || typeof bridge.debugToggle !== 'function') return;
+
+    const cbEnabled = document.getElementById('gc-debug-enabled');
+    const elCount = document.getElementById('gc-debug-count');
+    const btnOpen = document.getElementById('btn-gc-debug-open');
+    const btnClear = document.getElementById('btn-gc-debug-clear');
+    const inputCrate = document.getElementById('gc-debug-crate-id');
+    const btnTest = document.getElementById('btn-gc-debug-test');
+    const elResult = document.getElementById('gc-debug-test-result');
+
+    const KEY = 'fake-gps-pc:gc-debug-enabled';
+    const savedEnabled = localStorage.getItem(KEY) === '1';
+    cbEnabled.checked = savedEnabled;
+    bridge.debugToggle(savedEnabled);
+
+    bridge.debugGetStatus().then(function (s) {
+      elCount.textContent = (s.count || 0) + ' entradas';
+    });
+
+    bridge.onDebugCount(function (count) {
+      elCount.textContent = count + ' entradas';
+    });
+
+    cbEnabled.addEventListener('change', function () {
+      bridge.debugToggle(cbEnabled.checked);
+      localStorage.setItem(KEY, cbEnabled.checked ? '1' : '0');
+    });
+
+    btnOpen.addEventListener('click', function () { bridge.debugOpenFolder(); });
+
+    btnClear.addEventListener('click', function () {
+      if (!confirm('Limpar todo o log de debug?')) return;
+      bridge.debugClear();
+      elResult.textContent = '';
+      elResult.className = 'gc-debug-result';
+    });
+
+    btnTest.addEventListener('click', async function () {
+      const crateId = (inputCrate.value || '').trim();
+      if (!crateId) {
+        elResult.textContent = 'Preencha o crateId antes.';
+        elResult.className = 'gc-debug-result err';
+        return;
+      }
+      elResult.textContent = 'Chamando /v1/open/challenge...';
+      elResult.className = 'gc-debug-result';
+      btnTest.disabled = true;
+      try {
+        const r = await bridge.debugTestChallenge(crateId);
+        if (r.ok) {
+          elResult.textContent = 'status=' + r.status + '\n' + JSON.stringify(r.body, null, 2);
+          elResult.className = 'gc-debug-result ok';
+        } else {
+          elResult.textContent = 'ERRO: ' + (r.error || 'desconhecido');
+          elResult.className = 'gc-debug-result err';
+        }
+      } catch (e) {
+        elResult.textContent = 'Exception: ' + e.message;
+        elResult.className = 'gc-debug-result err';
+      } finally {
+        btnTest.disabled = false;
+      }
+    });
+  })();
+
   console.log('%c[Fake GPS PC] v0.1.14 pronto',
     'background:#1a73e8;color:#fff;padding:2px 6px;border-radius:3px');
   console.log('Controles: joystick (mouse) ou WASD/setas | ⏸ pausar sem perder posicao');

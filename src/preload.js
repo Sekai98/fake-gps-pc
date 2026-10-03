@@ -51,6 +51,33 @@ contextBridge.exposeInMainWorld('FakeGPSBridge', {
       try { return ipcRenderer.invoke('gocollect:fetch-crate-preview', { lat: lat, lng: lng }); }
       catch (e) { return Promise.resolve({ ok: false, error: 'ipc-fail' }); }
     },
+    // v0.1.27: Logger de investigação
+    debugToggle: function (enabled) {
+      try { return ipcRenderer.invoke('gc-debug:toggle', !!enabled); }
+      catch (e) { return Promise.resolve({ ok: false }); }
+    },
+    debugGetStatus: function () {
+      try { return ipcRenderer.invoke('gc-debug:get-status'); }
+      catch (e) { return Promise.resolve({ count: 0 }); }
+    },
+    debugOpenFolder: function () {
+      try { return ipcRenderer.invoke('gc-debug:open-folder'); }
+      catch (e) { return Promise.resolve({ ok: false }); }
+    },
+    debugClear: function () {
+      try { return ipcRenderer.invoke('gc-debug:clear'); }
+      catch (e) { return Promise.resolve({ ok: false }); }
+    },
+    debugTestChallenge: function (crateId) {
+      try { return ipcRenderer.invoke('gc-debug:test-challenge', crateId); }
+      catch (e) { return Promise.resolve({ ok: false, error: 'ipc-fail' }); }
+    },
+    onDebugCount: function (cb) {
+      if (typeof cb !== 'function') return;
+      ipcRenderer.on('gc-debug:count', function (_evt, count) {
+        try { cb(count); } catch (e) {}
+      });
+    },
     onScanProgress: function (cb) {
       if (typeof cb !== 'function') return;
       ipcRenderer.on('gocollect:scan-progress', function (_evt, payload) {

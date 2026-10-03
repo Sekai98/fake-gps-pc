@@ -12,7 +12,7 @@
     <div class="title">
       <span class="dot"></span>
       Fake GPS PC
-      <span class="version">v0.1.26</span>
+      <span class="version">v0.1.27</span>
     </div>
     <div class="status">
       <div class="gc-token-widget" title="Cola o Bearer token do gocollect.fun (DevTools > Network > v1/crates > Request Headers > authorization)">
@@ -437,6 +437,27 @@
     <div class="panel beacons-list-panel">
       <div class="panel-title">📍 LURES ENCONTRADOS</div>
       <div id="beacons-list" class="beacons-list"></div>
+    </div>
+
+    <div class="panel gc-debug-panel">
+      <div class="panel-title">🔬 INVESTIGAÇÃO</div>
+      <div class="gc-debug-row">
+        <label class="gc-debug-toggle">
+          <input type="checkbox" id="gc-debug-enabled" />
+          <span>Logar chamadas</span>
+        </label>
+        <span id="gc-debug-count" class="gc-debug-count">0 entradas</span>
+      </div>
+      <div class="gc-debug-row">
+        <button id="btn-gc-debug-open" class="gc-debug-btn">📂 Abrir pasta</button>
+        <button id="btn-gc-debug-clear" class="gc-debug-btn gc-debug-btn-danger">🗑 Limpar</button>
+      </div>
+      <div class="gc-debug-sep">Teste manual</div>
+      <div class="gc-debug-test-row">
+        <input type="text" id="gc-debug-crate-id" class="gc-debug-input" placeholder="crateId (ex: 89a884559c7ffff:1989994)" />
+        <button id="btn-gc-debug-test" class="gc-debug-btn">🔍 /v1/open/challenge</button>
+      </div>
+      <div id="gc-debug-test-result" class="gc-debug-result"></div>
     </div>
 
     <div class="panel controls-panel">

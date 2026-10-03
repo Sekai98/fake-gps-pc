@@ -299,9 +299,48 @@ function fetchCratePreview(token, lat, lng) {
   });
 }
 
+/**
+ * v0.1.27: chama POST /v1/open/challenge pra investigação. Retorna payload cru.
+ * HIPÓTESE: challenge é só prep (gera o puzzle). Testar antes de usar em loop.
+ */
+function fetchOpenChallenge(token, crateId, motion) {
+  return new Promise(function (resolve, reject) {
+    if (!token || typeof token !== 'string') { reject(new Error('Token Bearer ausente')); return; }
+    if (!crateId || typeof crateId !== 'string') { reject(new Error('crateId invalido')); return; }
+    const body = JSON.stringify({ crateId: crateId, motion: motion || null });
+    const req = https.request({
+      hostname: HOST,
+      port: 443,
+      path: '/v1/open/challenge',
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'content-length': Buffer.byteLength(body),
+        'authorization': 'Bearer ' + token,
+        'origin': 'https://gocollect.fun',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) FakeGPS/0.1'
+      }
+    }, function (res) {
+      const chunks = [];
+      res.on('data', function (c) { chunks.push(c); });
+      res.on('end', function () {
+        const bodyStr = Buffer.concat(chunks).toString('utf8');
+        let parsed = null;
+        try { parsed = JSON.parse(bodyStr); } catch (e) {}
+        resolve({ status: res.statusCode, body: parsed !== null ? parsed : bodyStr });
+      });
+    });
+    req.on('error', function (e) { reject(e); });
+    req.setTimeout(10000, function () { req.destroy(new Error('Timeout 10s')); });
+    req.write(body);
+    req.end();
+  });
+}
+
 module.exports = {
   fetchCrates: fetchCrates,
   fetchCratePreview: fetchCratePreview,
+  fetchOpenChallenge: fetchOpenChallenge,
   extractNearbyLures: extractNearbyLures,
   distanceMeters: distanceMeters,
   buildScanGrid: buildScanGrid,

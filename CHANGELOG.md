@@ -2,6 +2,49 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
+## [0.1.27] - 2026-10-03 (Electron) - Modo Investigação: logger passivo + teste manual /v1/open/challenge
+
+### Added
+- **Painel "🔬 INVESTIGAÇÃO"** no footer com:
+  - ☑ Toggle "Logar chamadas" (OFF por default, persistido em `localStorage`)
+  - Contador em tempo real "N entradas"
+  - Botão "📂 Abrir pasta" (abre `userData/` no Explorer)
+  - Botão "🗑 Limpar" (zera o arquivo de log)
+  - Input + botão "🔍 /v1/open/challenge" pra teste manual
+  - Área de resultado mostra response cru em JSON
+- **Extension expandida**: `inject.js` agora intercepta TODAS as chamadas `/v1/*` em `gocollect.fun` (antes só `/crates`). Captura método, URL, request body, status, response body (cap 20KB por entry). `content.js` posta no novo endpoint `/gc-debug-log` do server local.
+- **Server endpoint `POST /gc-debug-log`**: se logger ligado, chama callback do main.js que appenda em `userData/gocollect-debug.jsonl` (JSON lines).
+- **Teste manual `fetchOpenChallenge(token, crateId, motion)`**: função nova em `gocollect-api.js` + IPC `gc-debug:test-challenge`. Chama `POST /v1/open/challenge` isolado pra investigar o payload.
+- Novas bridges em preload: `debugToggle`, `debugGetStatus`, `debugOpenFolder`, `debugClear`, `debugTestChallenge`, `onDebugCount`.
+
+### How to use
+1. Liga o toggle "Logar chamadas"
+2. Abre `gocollect.fun` no Brave (com extensão carregada)
+3. Joga normalmente — anda, abre crates, resolve minigames
+4. Toda chamada /v1/* é gravada automaticamente em `userData/gocollect-debug.jsonl`
+5. Botão "📂 Abrir pasta" mostra o arquivo
+6. Analise ou envie pra análise
+
+### Why
+Pra entender o fluxo exato do minigame (payload de `/v1/open/challenge`, formato do `motion` enviado em `/open`), precisamos de **dados reais capturados durante uma jogatina**. Antes era preciso colar script no DevTools. Agora é automático.
+
+### Risk notes
+- Logger desligado por default. User liga quando quer investigar.
+- Teste manual com `/v1/open/challenge` **pode consumir shards** (desconhecido). Começar com 1 teste e observar response.
+- Arquivo de log pode crescer rápido (cada entry até 40KB). Botão limpar sempre à mão.
+
+### Files
+- EDIT `poc-extension/inject.js` (interceptor expandido pra TODAS as /v1/* + body do request)
+- EDIT `poc-extension/content.js` (POST /gc-debug-log)
+- EDIT `src/server.js` (endpoint /gc-debug-log + setOnGcDebugLog + setGcDebugEnabled + exports)
+- EDIT `src/main.js` (IPCs: toggle, status, open-folder, clear, test-challenge; shell.showItemInFolder)
+- EDIT `src/preload.js` (6 bridges novas)
+- EDIT `src/gocollect-api.js` (fetchOpenChallenge)
+- EDIT `src/renderer/index.html` (painel gc-debug-panel + v0.1.27)
+- EDIT `src/renderer/styles.css` (CSS do painel)
+- EDIT `src/renderer/app.js` (initGcDebugPanel wiring)
+- EDIT `package.json` + `poc-extension/manifest.json` (0.1.26 → 0.1.27, simetria)
+
 ## [0.1.26] - 2026-10-03 (Electron) - Fix REAL REAL do step: 1km (descoberta: beacon.seenWithinM = 800m)
 
 ### Fixed

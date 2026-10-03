@@ -167,6 +167,28 @@ window.addEventListener('message', async function (evt) {
     return;
   }
 
+  // v0.1.27: debug log de todas as /v1/* do gocollect
+  if (d.__fakegps_gc_debug === true) {
+    let port = activePort;
+    if (!port) {
+      port = await discoverServer();
+      if (!port) return;
+      activePort = port;
+    }
+    try {
+      await fetch('http://' + getServerHost() + ':' + port + '/gc-debug-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reqTs: d.reqTs, resTs: d.resTs, url: d.url, method: d.method,
+          reqBody: d.reqBody, status: d.status, resBody: d.resBody
+        }),
+        cache: 'no-store'
+      });
+    } catch (e) { /* server pode estar off ou logger desligado */ }
+    return;
+  }
+
   if (d.__fakegps_crates !== true) return;
   if (!overrideEnabled) return;
   let port = activePort;
