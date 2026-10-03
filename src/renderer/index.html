@@ -12,7 +12,7 @@
     <div class="title">
       <span class="dot"></span>
       Fake GPS PC
-      <span class="version">v0.1.16</span>
+      <span class="version">v0.1.17</span>
     </div>
     <div class="status">
       <div class="gc-token-widget" title="Cola o Bearer token do gocollect.fun (DevTools > Network > v1/crates > Request Headers > authorization)">
@@ -386,6 +386,12 @@
         <button id="btn-beacons-refresh" class="beacons-refresh-btn" disabled>🔄 Atualizar</button>
         <button id="btn-beacons-cancel" class="beacons-cancel-btn" style="display:none">⏹ Cancelar</button>
         <button id="btn-beacons-clear-token" class="beacons-clear-btn" title="Remove token salvo" style="display:none">×</button>
+      </div>
+      <div class="beacons-radius-row">
+        <label>Centro:</label>
+        <span id="beacons-center-label" class="beacons-center-label">📍 Avatar</span>
+        <button id="btn-beacons-pick-center" class="beacons-pick-btn" title="Clica no mapa pra definir o centro do scan">Alterar</button>
+        <button id="btn-beacons-reset-center" class="beacons-clear-btn" title="Volta pro centro = avatar" style="display:none">×</button>
       </div>
       <div class="beacons-radius-row">
         <label for="beacons-radius-input">Raio:</label>

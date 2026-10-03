@@ -1587,3 +1587,27 @@ body { display: flex; flex-direction: column; }
 .beacons-pacing-risk-low { color: #6bff8e; }
 .beacons-pacing-risk-med { color: #f9ab00; }
 .beacons-pacing-risk-high { color: #ff6b6b; font-weight: bold; }
+
+/* v0.1.17: Seletor de centro do scan */
+.beacons-center-label { font-size: 12px; color: #e8eaed; font-family: monospace; flex: 1; }
+.beacons-pick-btn {
+  background: #2a3744; color: #e8eaed; border: 1px solid #3a4855;
+  padding: 2px 8px; border-radius: 3px; cursor: pointer; font-size: 11px;
+}
+.beacons-pick-btn:hover { background: #3a4855; }
+.beacons-pick-btn.picking {
+  background: #f9ab00; color: #000; border-color: #f9ab00;
+  animation: pickingPulse 1s ease-in-out infinite;
+}
+@keyframes pickingPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(249, 171, 0, 0.6); }
+  50% { box-shadow: 0 0 0 6px rgba(249, 171, 0, 0); }
+}
+/* Marker 🎯 do centro do scan */
+.scan-center-marker { background: transparent; border: none; }
+.scan-center-pin {
+  font-size: 22px; text-align: center; line-height: 28px;
+  filter: drop-shadow(0 0 4px rgba(249, 171, 0, 0.9));
+}
+/* Cursor crosshair quando selecionando */
+.leaflet-container.selecting-scan-center { cursor: crosshair !important; }

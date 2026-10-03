@@ -2,6 +2,34 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
+## [0.1.17] - 2026-10-03 (Electron) - Centro do scan selecionável no mapa (click)
+
+### Added
+- **Seletor de centro do scan**: linha "Centro:" no painel beacons com:
+  - Default `📍 Avatar` (comportamento anterior - centro = posição do avatar)
+  - Botão **Alterar** entra em modo seleção: cursor vira crosshair, botão fica amarelo pulsando
+  - Clique no mapa fixa o centro em `lat, lng`
+  - Marker visual 🎯 no mapa marca o local escolhido
+  - Label passa a mostrar `🎯 lat, lng` com botão × pra resetar
+  - ESC durante seleção cancela
+- `src/renderer/map.js` ganha API nova: `onNextClick(cb)`, `setScanCenterMarker(latlng)`, `clearScanCenterMarker()` (expostos pelo instance)
+- `scan()` do app.js agora passa `scanLat/scanLng` (do centro escolhido OU do avatar como fallback) pro `scanRegion`
+
+### UX
+- Centro escolhido é mantido só na sessão atual (ao reabrir Electron, volta pro default avatar — evita confusão)
+- Alterar enquanto já está em modo seleção = cancela (nenhum ciclo infinito)
+- Distância dos lures é calculada em relação ao CENTRO do scan, não ao avatar
+
+### Why
+- Combinado com API aceitar qualquer lat/lng (confirmado em v0.1.16), isso destrava **monitoramento de qualquer região do mundo** sem precisar teleportar o avatar. Ex: avatar em Itaocara, scan em BH, Rio, SP.
+
+### Files
+- EDIT `src/renderer/map.js` (onNextClick + setScanCenterMarker + clearScanCenterMarker + exports)
+- EDIT `src/renderer/index.html` (linha "Centro:" + v0.1.17)
+- EDIT `src/renderer/styles.css` (botão picking + marker + crosshair cursor)
+- EDIT `src/renderer/app.js` (scanCenter state + startPickingCenter + resetCenter + scan() usa centro escolhido)
+- EDIT `package.json` + `poc-extension/manifest.json` (0.1.16 → 0.1.17, simetria)
+
 ## [0.1.16] - 2026-10-03 (Electron) - Pacing configurável no scan regional
 
 ### Added

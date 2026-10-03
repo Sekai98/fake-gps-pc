@@ -1745,6 +1745,11 @@
     // v0.1.16: pacing configurável
     const pacingInput = document.getElementById('beacons-pacing-input');
     const pacingHint = document.getElementById('beacons-pacing-hint');
+    // v0.1.17: centro do scan (default = avatar, pode fixar via click no mapa)
+    const centerLabel = document.getElementById('beacons-center-label');
+    const btnPickCenter = document.getElementById('btn-beacons-pick-center');
+    const btnResetCenter = document.getElementById('btn-beacons-reset-center');
+    let scanCenter = null;  // null = usa avatar; { lat, lng } = fixado
     const elProgress = document.getElementById('beacons-progress');
     const elProgressFill = document.getElementById('beacons-progress-fill');
     const elProgressText = document.getElementById('beacons-progress-text');
@@ -1795,6 +1800,55 @@
       if (p >= 100 && p <= 5000) localStorage.setItem(SAVED_PACING_KEY, String(p));
     });
     updateHints();
+
+    // --- v0.1.17: picker de centro no mapa ---
+    const Map = global.FakeGPS && global.FakeGPS.Map;
+
+    function refreshCenterLabel() {
+      if (scanCenter) {
+        centerLabel.textContent = '🎯 ' + scanCenter.lat.toFixed(5) + ', ' + scanCenter.lng.toFixed(5);
+        btnResetCenter.style.display = '';
+      } else {
+        centerLabel.textContent = '📍 Avatar';
+        btnResetCenter.style.display = 'none';
+      }
+    }
+
+    function startPickingCenter() {
+      if (!Map || typeof Map.onNextClick !== 'function') return;
+      btnPickCenter.classList.add('picking');
+      btnPickCenter.textContent = 'Clique no mapa...';
+      const mapContainer = document.getElementById('map');
+      if (mapContainer) mapContainer.classList.add('selecting-scan-center');
+
+      function cancelPicking() {
+        btnPickCenter.classList.remove('picking');
+        btnPickCenter.textContent = 'Alterar';
+        if (mapContainer) mapContainer.classList.remove('selecting-scan-center');
+        document.removeEventListener('keydown', escHandler);
+      }
+      function escHandler(e) {
+        if (e.key === 'Escape') { Map.onNextClick(null); cancelPicking(); }
+      }
+      document.addEventListener('keydown', escHandler);
+
+      Map.onNextClick(function (latlng) {
+        scanCenter = { lat: latlng.lat, lng: latlng.lng };
+        try { Map.setScanCenterMarker(latlng); } catch (e) {}
+        refreshCenterLabel();
+        cancelPicking();
+      });
+    }
+
+    function resetCenter() {
+      scanCenter = null;
+      try { if (Map && Map.clearScanCenterMarker) Map.clearScanCenterMarker(); } catch (e) {}
+      refreshCenterLabel();
+    }
+
+    btnPickCenter.addEventListener('click', startPickingCenter);
+    btnResetCenter.addEventListener('click', resetCenter);
+    refreshCenterLabel();
 
     function setTokenState(hasToken, preview) {
       if (hasToken) {
@@ -1924,7 +1978,16 @@
     async function scan() {
       const Movement = global.FakeGPS && global.FakeGPS.Movement;
       if (!Movement) { alert('Movement module ausente'); return; }
-      const snap = Movement.getRaw();
+      // v0.1.17: usa scanCenter se o user escolheu, senão posição do avatar
+      let scanLat, scanLng;
+      if (scanCenter) {
+        scanLat = scanCenter.lat;
+        scanLng = scanCenter.lng;
+      } else {
+        const snap = Movement.getRaw();
+        scanLat = snap.lat;
+        scanLng = snap.lon;
+      }
       const radiusKm = currentRadius();
       const pacingMs = currentPacing();
 
@@ -1933,7 +1996,7 @@
       elProgressText.textContent = '0 / ?';
 
       try {
-        const result = await bridge.scanRegion(snap.lat, snap.lon, radiusKm, pacingMs);
+        const result = await bridge.scanRegion(scanLat, scanLng, radiusKm, pacingMs);
         if (!result.ok) {
           if (result.error === 'unauthorized') {
             setTokenState(false);

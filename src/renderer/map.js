@@ -127,9 +127,39 @@
       }, 0);
     }
 
+    // v0.1.17: handler de "próximo click" sobrescreve o popup padrão uma vez.
+    // Usado pra selecionar centro do scan de beacons pelo mapa.
+    let onNextClickCb = null;
+    function onNextClick(cb) { onNextClickCb = typeof cb === 'function' ? cb : null; }
+
     map.on('click', function (e) {
+      if (onNextClickCb) {
+        const cb = onNextClickCb;
+        onNextClickCb = null;
+        try { cb(e.latlng); } catch (err) { console.warn('[map] onNextClick err:', err); }
+        return;
+      }
       showActionPopup(e.latlng);
     });
+
+    // v0.1.17: marker visual do centro do scan de beacons
+    let scanCenterMarker = null;
+    function setScanCenterMarker(latlng) {
+      clearScanCenterMarker();
+      scanCenterMarker = L.marker([latlng.lat, latlng.lng], {
+        icon: L.divIcon({
+          className: 'scan-center-marker',
+          html: '<div class="scan-center-pin">🎯</div>',
+          iconSize: [28, 28],
+          iconAnchor: [14, 14]
+        }),
+        interactive: false,
+        keyboard: false
+      }).addTo(map);
+    }
+    function clearScanCenterMarker() {
+      if (scanCenterMarker) { try { map.removeLayer(scanCenterMarker); } catch (e) {} scanCenterMarker = null; }
+    }
 
     // --- Polyline de rota ---
     let routeLayer = null;
@@ -330,6 +360,9 @@
       renderCustomPins: renderCustomPins,
       clearCustomPins: clearCustomPins,
       onCustomPinRemove: onCustomPinRemove,
+      onNextClick: onNextClick,
+      setScanCenterMarker: setScanCenterMarker,
+      clearScanCenterMarker: clearScanCenterMarker,
       destroy: destroy
     };
   }
