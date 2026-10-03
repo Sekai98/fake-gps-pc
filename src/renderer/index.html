@@ -12,7 +12,7 @@
     <div class="title">
       <span class="dot"></span>
       Fake GPS PC
-      <span class="version">v0.1.14.2</span>
+      <span class="version">v0.1.15</span>
     </div>
     <div class="status">
       <div class="gc-token-widget" title="Cola o Bearer token do gocollect.fun (DevTools > Network > v1/crates > Request Headers > authorization)">
@@ -384,11 +384,22 @@
       <div class="beacons-header">
         <span id="beacons-token-status" class="beacons-token-status beacons-token-missing">⚠ Sem token</span>
         <button id="btn-beacons-refresh" class="beacons-refresh-btn" disabled>🔄 Atualizar</button>
+        <button id="btn-beacons-cancel" class="beacons-cancel-btn" style="display:none">⏹ Cancelar</button>
         <button id="btn-beacons-clear-token" class="beacons-clear-btn" title="Remove token salvo" style="display:none">×</button>
       </div>
+      <div class="beacons-radius-row">
+        <label for="beacons-radius-input">Raio:</label>
+        <input type="number" id="beacons-radius-input" class="beacons-radius-input" value="30" min="2" max="100" step="1" />
+        <span class="beacons-radius-unit">km</span>
+        <span id="beacons-radius-hint" class="beacons-radius-hint">(~314 chamadas · ~3min)</span>
+      </div>
+      <div id="beacons-progress" class="beacons-progress" style="display:none">
+        <div class="beacons-progress-bar"><div id="beacons-progress-fill" class="beacons-progress-fill"></div></div>
+        <div id="beacons-progress-text" class="beacons-progress-text">0 / 0</div>
+      </div>
       <div id="beacons-hint" class="beacons-hint">
-        Abra <b>gocollect.fun</b> no Brave com a extension FakeGPS instalada e logue.
-        O token é capturado automaticamente.
+        Abra <b>gocollect.fun</b> no Brave com a extension FakeGPS instalada e logue,
+        ou cole o Bearer no campo do header.
       </div>
       <div id="beacons-list" class="beacons-list"></div>
     </div>

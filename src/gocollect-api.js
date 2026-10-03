@@ -118,8 +118,101 @@ function extractNearbyLures(apiResponse, fromLat, fromLng) {
     .sort(function (a, b) { return a.distanceMeters - b.distanceMeters; });
 }
 
+/**
+ * Monta grid de pontos cobrindo circulo de raio em km ao redor de (centerLat, centerLng).
+ * Step em km (default 3) - cada chamada cobre raio ~2km, step 3km da overlap seguro.
+ */
+function buildScanGrid(centerLat, centerLng, radiusKm, stepKm) {
+  const step = typeof stepKm === 'number' ? stepKm : 3;
+  const latDegPerKm = 1 / 111;
+  const lngDegPerKm = 1 / (111 * Math.cos(centerLat * Math.PI / 180));
+  const stepLat = step * latDegPerKm;
+  const stepLng = step * lngDegPerKm;
+  const spanLat = radiusKm * latDegPerKm;
+  const spanLng = radiusKm * lngDegPerKm;
+  const points = [];
+  // Inclui centro
+  points.push({ lat: centerLat, lng: centerLng });
+  for (let dLat = -spanLat; dLat <= spanLat + 1e-9; dLat += stepLat) {
+    for (let dLng = -spanLng; dLng <= spanLng + 1e-9; dLng += stepLng) {
+      if (dLat === 0 && dLng === 0) continue;
+      const pt = { lat: centerLat + dLat, lng: centerLng + dLng };
+      const dist = distanceMeters(centerLat, centerLng, pt.lat, pt.lng);
+      if (dist <= radiusKm * 1000) points.push(pt);
+    }
+  }
+  return points;
+}
+
+function sleep(ms) {
+  return new Promise(function (resolve) { setTimeout(resolve, ms); });
+}
+
+/**
+ * Varre grid de pontos chamando fetchCrates em cada um, com pacing e dedupe.
+ * @param {string} token - Bearer
+ * @param {number} centerLat
+ * @param {number} centerLng
+ * @param {number} radiusKm - raio em km (2-100)
+ * @param {object} opts - { pacingMs=600, stepKm=3, onProgress(progress), shouldCancel() }
+ * @returns {Promise<{lures: [], scanned: n, total: n, cancelled: bool, errors: n}>}
+ */
+async function scanRegion(token, centerLat, centerLng, radiusKm, opts) {
+  opts = opts || {};
+  const pacingMs = typeof opts.pacingMs === 'number' ? opts.pacingMs : 600;
+  const stepKm = typeof opts.stepKm === 'number' ? opts.stepKm : 3;
+  const onProgress = typeof opts.onProgress === 'function' ? opts.onProgress : null;
+  const shouldCancel = typeof opts.shouldCancel === 'function' ? opts.shouldCancel : null;
+
+  const points = buildScanGrid(centerLat, centerLng, radiusKm, stepKm);
+  const total = points.length;
+  const luresMap = {};  // dedupe por id
+  let scanned = 0;
+  let errors = 0;
+  let cancelled = false;
+
+  for (let i = 0; i < points.length; i++) {
+    if (shouldCancel && shouldCancel()) { cancelled = true; break; }
+    const pt = points[i];
+    try {
+      const data = await fetchCrates(token, pt.lat, pt.lng);
+      if (data && Array.isArray(data.lures)) {
+        data.lures.forEach(function (l) {
+          if (!l || typeof l.id === 'undefined') return;
+          // Dedupe: mantem o primeiro encontrado
+          if (!luresMap[l.id]) {
+            luresMap[l.id] = Object.assign({}, l, {
+              distanceMeters: distanceMeters(centerLat, centerLng, l.lat, l.lng)
+            });
+          }
+        });
+      }
+    } catch (e) {
+      errors++;
+      // 401 = token invalido, aborta todo o scan
+      if (e.status === 401) {
+        if (onProgress) onProgress({ scanned: scanned, total: total, lureCount: Object.keys(luresMap).length, aborted: 'unauthorized' });
+        return {
+          lures: Object.values(luresMap).sort(function (a, b) { return a.distanceMeters - b.distanceMeters; }),
+          scanned: scanned, total: total, cancelled: false, errors: errors, aborted: 'unauthorized'
+        };
+      }
+    }
+    scanned++;
+    if (onProgress) onProgress({ scanned: scanned, total: total, lureCount: Object.keys(luresMap).length });
+    if (i < points.length - 1) await sleep(pacingMs);
+  }
+
+  return {
+    lures: Object.values(luresMap).sort(function (a, b) { return a.distanceMeters - b.distanceMeters; }),
+    scanned: scanned, total: total, cancelled: cancelled, errors: errors
+  };
+}
+
 module.exports = {
   fetchCrates: fetchCrates,
   extractNearbyLures: extractNearbyLures,
-  distanceMeters: distanceMeters
+  distanceMeters: distanceMeters,
+  buildScanGrid: buildScanGrid,
+  scanRegion: scanRegion
 };

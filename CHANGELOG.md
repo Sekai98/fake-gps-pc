@@ -2,6 +2,40 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
+## [0.1.15] - 2026-10-03 (Electron) - Scan regional de beacons com raio configurável
+
+### Added
+- **Scan regional**: botão "🔄 Atualizar" agora varre em grid um círculo de raio configurável ao redor do avatar
+  - Campo numérico "Raio: X km" (2-100, default 30), persistido em localStorage
+  - Hint em tempo real mostra estimativa de chamadas e tempo (ex: "~314 chamadas · ~3min")
+  - Barra de progresso durante o scan com contador "X / Y · N lures found"
+  - Botão "⏹ Cancelar" aborta o scan em andamento
+  - Dedupe automático por `lure.id` (mesmo lure aparece em várias chamadas no grid)
+  - Lures ordenados pela distância do avatar
+- **Backend**: nova função `GocollectAPI.scanRegion(token, lat, lng, radiusKm, {pacingMs, stepKm, onProgress, shouldCancel})` e helper `buildScanGrid`
+- **IPC novos**: `gocollect:scan-region` (com callback de progresso via `gocollect:scan-progress`) e `gocollect:cancel-scan`
+- **Bridge**: `window.FakeGPSBridge.gocollect.scanRegion`, `cancelScan`, `onScanProgress`
+
+### Design
+- **Pacing fixo em 600ms** entre chamadas (hardcoded no main.js) - fica abaixo do rate limit do Cloudflare (~100-300 req/min) mas não é super stealth
+- **Grid step 3km** (hardcoded) - cada chamada cobre raio ~2km, step 3km dá overlap seguro sem buracos
+- **Falha de 1 chamada não para o scan** - só incrementa contador de erros
+- **401 em qualquer ponto aborta** o scan inteiro (token expirado)
+
+### Risk notes
+- Scan de 30km = ~314 chamadas em ~3min. Risco **médio** de detecção pelo backend do gocollect (padrão de "avatar olhando centenas de locais diferentes" é anti-natural)
+- Evitar fazer scans de 30km+ repetidamente em curto prazo
+- Pacing conservador: se der problema de rate limit, aumentar `pacingMs` em `src/main.js` (hoje 600ms)
+
+### Files
+- EDIT `src/gocollect-api.js` (scanRegion + buildScanGrid)
+- EDIT `src/main.js` (IPC scan-region + cancel-scan + currentScanCancelFlag)
+- EDIT `src/preload.js` (bridges scanRegion/cancelScan/onScanProgress)
+- EDIT `src/renderer/index.html` (campo raio + barra de progresso + botão cancelar + v0.1.15)
+- EDIT `src/renderer/styles.css` (CSS do progresso e campo raio)
+- EDIT `src/renderer/app.js` (scan function substitui refresh, radiusInput wiring, persist localStorage)
+- EDIT `package.json` + `poc-extension/manifest.json` (bump 0.1.14.2 → 0.1.15, simetria)
+
 ## [0.1.14.2] - 2026-10-03 (Electron) - Campo de token manual no header + badge visual + remove check firewall
 
 ### Added

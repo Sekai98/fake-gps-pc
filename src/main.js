@@ -145,6 +145,42 @@ ipcMain.handle('gocollect:save-token', (_evt, token) => {
   return { ok: saved };
 });
 
+// v0.1.15: scan de região (grid de chamadas pra cobrir raio em km)
+let currentScanCancelFlag = { cancel: false };
+ipcMain.handle('gocollect:scan-region', async (_evt, params) => {
+  const token = readGocollectToken();
+  if (!token) return { ok: false, error: 'no-token' };
+  const lat = params && typeof params.lat === 'number' ? params.lat : null;
+  const lng = params && typeof params.lng === 'number' ? params.lng : null;
+  const radiusKm = params && typeof params.radiusKm === 'number' ? params.radiusKm : 2;
+  if (lat === null || lng === null) return { ok: false, error: 'bad-coords' };
+  if (radiusKm < 2 || radiusKm > 100) return { ok: false, error: 'bad-radius' };
+
+  currentScanCancelFlag = { cancel: false };
+  const localFlag = currentScanCancelFlag;
+
+  const result = await GocollectAPI.scanRegion(token, lat, lng, radiusKm, {
+    pacingMs: 600,
+    stepKm: 3,
+    onProgress: function (progress) {
+      if (mainWin && !mainWin.isDestroyed()) {
+        mainWin.webContents.send('gocollect:scan-progress', progress);
+      }
+    },
+    shouldCancel: function () { return localFlag.cancel; }
+  });
+
+  if (result.aborted === 'unauthorized') {
+    return { ok: false, error: 'unauthorized', partial: { lures: result.lures, scanned: result.scanned, total: result.total } };
+  }
+  return { ok: true, lures: result.lures, scanned: result.scanned, total: result.total, cancelled: result.cancelled, errors: result.errors };
+});
+
+ipcMain.handle('gocollect:cancel-scan', () => {
+  if (currentScanCancelFlag) currentScanCancelFlag.cancel = true;
+  return { ok: true };
+});
+
 // Hook pro server.js chamar quando a extension postar o token em /gocollect-token
 Server.setOnGocollectToken((token) => {
   if (writeGocollectToken(token) && mainWin && !mainWin.isDestroyed()) {

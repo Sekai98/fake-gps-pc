@@ -1731,6 +1731,7 @@
 
     const elStatus = document.getElementById('beacons-token-status');
     const btnRefresh = document.getElementById('btn-beacons-refresh');
+    const btnCancel = document.getElementById('btn-beacons-cancel');
     const btnClear = document.getElementById('btn-beacons-clear-token');
     const elHint = document.getElementById('beacons-hint');
     const elList = document.getElementById('beacons-list');
@@ -1738,7 +1739,36 @@
     const headerBadge = document.getElementById('gc-token-badge');
     const headerInput = document.getElementById('gc-token-input');
     const headerSave = document.getElementById('gc-token-save');
+    // v0.1.15: scan regional
+    const radiusInput = document.getElementById('beacons-radius-input');
+    const radiusHint = document.getElementById('beacons-radius-hint');
+    const elProgress = document.getElementById('beacons-progress');
+    const elProgressFill = document.getElementById('beacons-progress-fill');
+    const elProgressText = document.getElementById('beacons-progress-text');
     let currentLures = [];
+
+    // Persistência do raio em localStorage
+    const SAVED_RADIUS_KEY = 'fake-gps-pc:beacons-radius-km';
+    const savedRadius = parseInt(localStorage.getItem(SAVED_RADIUS_KEY), 10);
+    if (savedRadius >= 2 && savedRadius <= 100) {
+      radiusInput.value = savedRadius;
+    }
+    function updateRadiusHint() {
+      const r = Math.max(2, Math.min(100, parseInt(radiusInput.value, 10) || 30));
+      // Estimativa de chamadas: círculo em grid de 3km
+      const chamadas = Math.max(1, Math.round(Math.PI * r * r / 9));
+      const segundos = Math.round(chamadas * 0.6);
+      const label = segundos > 60
+        ? '~' + Math.round(segundos / 60) + 'min'
+        : '~' + segundos + 's';
+      radiusHint.textContent = '(~' + chamadas + ' chamadas · ' + label + ')';
+    }
+    radiusInput.addEventListener('input', function () {
+      updateRadiusHint();
+      const r = parseInt(radiusInput.value, 10);
+      if (r >= 2 && r <= 100) localStorage.setItem(SAVED_RADIUS_KEY, String(r));
+    });
+    updateRadiusHint();
 
     function setTokenState(hasToken, preview) {
       if (hasToken) {
@@ -1843,35 +1873,76 @@
       });
     }
 
-    async function refresh() {
-      btnRefresh.disabled = true;
-      btnRefresh.textContent = '⏳ ...';
+    function setScanning(on) {
+      if (on) {
+        btnRefresh.style.display = 'none';
+        btnCancel.style.display = '';
+        elProgress.style.display = 'flex';
+        radiusInput.disabled = true;
+      } else {
+        btnRefresh.style.display = '';
+        btnCancel.style.display = 'none';
+        elProgress.style.display = 'none';
+        radiusInput.disabled = false;
+      }
+    }
+
+    bridge.onScanProgress(function (progress) {
+      if (!progress) return;
+      const pct = progress.total > 0 ? Math.round(100 * progress.scanned / progress.total) : 0;
+      elProgressFill.style.width = pct + '%';
+      elProgressText.textContent = progress.scanned + ' / ' + progress.total
+        + ' · ' + (progress.lureCount || 0) + ' lures';
+    });
+
+    async function scan() {
+      const Movement = global.FakeGPS && global.FakeGPS.Movement;
+      if (!Movement) { alert('Movement module ausente'); return; }
+      const snap = Movement.getRaw();
+      const radiusKm = Math.max(2, Math.min(100, parseInt(radiusInput.value, 10) || 30));
+
+      setScanning(true);
+      elProgressFill.style.width = '0%';
+      elProgressText.textContent = '0 / ?';
+
       try {
-        const Movement = global.FakeGPS && global.FakeGPS.Movement;
-        if (!Movement) throw new Error('Movement module ausente');
-        const snap = Movement.getRaw();
-        const result = await bridge.fetchLures(snap.lat, snap.lon);
+        const result = await bridge.scanRegion(snap.lat, snap.lon, radiusKm);
         if (!result.ok) {
           if (result.error === 'unauthorized') {
             setTokenState(false);
-            alert('Token do gocollect expirou. Reabra o site logado pra capturar um novo.');
+            alert('Token do gocollect expirou. Cole um novo no campo do header ou reabra gocollect.fun pra capturar automaticamente.');
+            if (result.partial && result.partial.lures) renderLures(result.partial.lures);
           } else if (result.error === 'no-token') {
             setTokenState(false);
           } else {
-            alert('Erro ao buscar beacons: ' + (result.message || result.error));
+            alert('Erro ao scanear: ' + (result.message || result.error));
           }
         } else {
           renderLures(result.lures);
+          if (result.cancelled) {
+            console.log('[fakegps] scan cancelado em ' + result.scanned + '/' + result.total);
+          }
+          if (result.errors > 0) {
+            console.warn('[fakegps] ' + result.errors + ' chamadas falharam durante o scan');
+          }
         }
       } catch (e) {
         alert('Erro: ' + e.message);
       } finally {
-        btnRefresh.disabled = false;
-        btnRefresh.textContent = '🔄 Atualizar';
+        setScanning(false);
       }
     }
 
-    btnRefresh.addEventListener('click', refresh);
+    btnRefresh.addEventListener('click', scan);
+    btnCancel.addEventListener('click', function () {
+      bridge.cancelScan();
+      btnCancel.disabled = true;
+      btnCancel.textContent = '⏸ cancelando...';
+      setTimeout(function () {
+        btnCancel.disabled = false;
+        btnCancel.textContent = '⏹ Cancelar';
+      }, 2000);
+    });
 
     btnClear.addEventListener('click', async function () {
       if (!confirm('Remover token salvo? Vai precisar reabrir gocollect.fun pra capturar de novo.')) return;
