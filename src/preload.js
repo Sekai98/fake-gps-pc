@@ -20,5 +20,26 @@ contextBridge.exposeInMainWorld('FakeGPSBridge', {
   // v0.1.14: publica lista de abas pra extension listar no dropdown
   publishTabsList: function (tabs) {
     try { ipcRenderer.send('fake-gps:update-tabs', tabs); } catch (e) {}
+  },
+  // v0.1.14: integração com gocollect.fun (listador de beacons)
+  gocollect: {
+    fetchLures: function (lat, lng) {
+      try { return ipcRenderer.invoke('gocollect:fetch-lures', { lat: lat, lng: lng }); }
+      catch (e) { return Promise.resolve({ ok: false, error: 'ipc-fail' }); }
+    },
+    getTokenStatus: function () {
+      try { return ipcRenderer.invoke('gocollect:get-token-status'); }
+      catch (e) { return Promise.resolve({ hasToken: false }); }
+    },
+    clearToken: function () {
+      try { return ipcRenderer.invoke('gocollect:clear-token'); }
+      catch (e) { return Promise.resolve({ ok: false }); }
+    },
+    onTokenUpdated: function (cb) {
+      if (typeof cb !== 'function') return;
+      ipcRenderer.on('gocollect:token-updated', function (_evt, payload) {
+        try { cb(payload); } catch (e) {}
+      });
+    }
   }
 });

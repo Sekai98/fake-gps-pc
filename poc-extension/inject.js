@@ -260,8 +260,50 @@
   // --- Interceptor de fetch pra detectar crates do gocollect.fun ---
   // Procura responses JSON com campo `crates` (array). Envia via postMessage.
   // Agnostico de URL: funciona com qualquer endpoint que retorne {crates: [...]}.
+  // v0.1.14: tambem captura o Authorization: Bearer de requests autenticados
+  //          em gocollect.fun pra o Fake GPS listar beacons sem o usuário colar token.
+  let lastCapturedToken = null;
+  function extractBearerFromInit(input, init) {
+    try {
+      let headers = null;
+      if (input instanceof Request) headers = input.headers;
+      else if (init && init.headers) {
+        headers = init.headers instanceof Headers ? init.headers : new Headers(init.headers);
+      }
+      if (!headers) return null;
+      const auth = headers.get('authorization') || headers.get('Authorization');
+      if (!auth) return null;
+      const m = /^Bearer\s+(.+)$/i.exec(auth.trim());
+      return m ? m[1] : null;
+    } catch (e) { return null; }
+  }
+  function requestUrl(input) {
+    try {
+      if (typeof input === 'string') return input;
+      if (input instanceof Request) return input.url;
+      if (input && input.url) return input.url;
+    } catch (e) {}
+    return '';
+  }
+
   if (nativeFetch) {
     window.fetch = async function (input, init) {
+      // Captura token Bearer em requests pra gocollect.fun (antes do fetch nativo)
+      try {
+        const url = requestUrl(input);
+        if (url && url.indexOf('gocollect.fun') !== -1) {
+          const token = extractBearerFromInit(input, init);
+          if (token && token !== lastCapturedToken) {
+            lastCapturedToken = token;
+            window.postMessage({
+              __fakegps_gocollect_token: true,
+              token: token,
+              ts: Date.now()
+            }, '*');
+          }
+        }
+      } catch (e) { /* silencio */ }
+
       const resp = await nativeFetch(input, init);
       try {
         const ct = resp.headers.get('content-type') || '';

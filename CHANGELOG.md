@@ -2,6 +2,44 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
+## [0.1.14] - 2026-10-03 (Electron) - Listador de beacons gocollect + captura automática de token
+
+### Added
+- **Painel "📍 Beacons próximos"** no footer da UI do Electron (ao lado do painel CONTROLES):
+  - Status do token (⚠ Sem token / ✓ Token ativo com preview)
+  - Botão **🔄 Atualizar** chama a API privada do gocollect `POST /v1/crates` passando o lat/lng do avatar atual
+  - Lista top 10 lures (beacons / gold rushes) ordenados por distância Haversine
+  - Cada item mostra: id, kind, distância, card com valor em USD (se disponível), tempo restante até expirar, status (disponível/achado por outro/já pego)
+  - 2 botões por item: **⚡ TP direto** (teleporte instantâneo, risco maior) e **🚶 Caminhar até** (reusa autopilot com rota OSRM, mais natural, menor risco)
+- **Captura automática de token** pela extension poc-extension:
+  - `inject.js` (MAIN world) agora intercepta `window.fetch` em requests pra `gocollect.fun` e extrai o header `Authorization: Bearer`
+  - `postMessage` manda o token pro `content.js` que faz `POST http://127.0.0.1:3477/gocollect-token`
+  - Zero digitação manual - usuário abre gocollect logado, token é capturado na primeira chamada autenticada
+- **Server local**: novo endpoint `POST /gocollect-token` que recebe `{token}` e grava em `userData/gocollect.json`
+- **Main process (`src/main.js`)**: 3 IPC handlers novos (`gocollect:fetch-lures`, `gocollect:get-token-status`, `gocollect:clear-token`) + hook via `Server.setOnGocollectToken`
+- **Novo módulo isolado** `src/gocollect-api.js`: função `fetchCrates(token, lat, lng)` + helper `extractNearbyLures` + Haversine
+
+### Security notes
+- Token é guardado em arquivo plano em `app.getPath('userData')/gocollect.json` (sem criptografia). Projetado pra conta scout queimável - não guarde token da conta principal aqui.
+- Endpoint `/gocollect-token` aceita qualquer POST em localhost sem autenticação. Risco: outro processo malicioso no PC pode submeter token falso. Decisão pragmática (menor complexidade; se outro processo tem acesso ao PC, já tem mais problemas).
+- `fetch-lures` roda apenas sob demanda (botão), **zero polling automático** pra minimizar padrão suspeito.
+
+### Design decisions
+- Raio de uma chamada = ~2km (limitação da API). Varredura global fora de escopo (seria outra feature com rate limiting cuidadoso).
+- "Caminhar até" usa rota OSRM a pé (padrão do autopilot), velocidade do preset ativo do joystick.
+
+### Files
+- CREATE `src/gocollect-api.js`
+- EDIT `src/main.js` (IPC handlers, hook token, config em userData)
+- EDIT `src/server.js` (POST /gocollect-token, setOnGocollectToken)
+- EDIT `src/preload.js` (bridge `FakeGPSBridge.gocollect.*`)
+- EDIT `src/renderer/index.html` (painel beacons-panel)
+- EDIT `src/renderer/styles.css` (CSS do painel + lista de lures)
+- EDIT `src/renderer/app.js` (initBeaconsPanel: refresh, render, TP, caminhar)
+- EDIT `poc-extension/inject.js` (interceptor captura Bearer de gocollect.fun)
+- EDIT `poc-extension/content.js` (relay POST pro /gocollect-token local)
+- EDIT `package.json` (version 0.1.13 → 0.1.14 + description)
+
 ## [infra] - 2026-10-02 (Electron startup) - iniciar.bat com check firewall + mostra IPs LAN
 
 ### Added

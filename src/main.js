@@ -1,6 +1,8 @@
 const { app, BrowserWindow, ipcMain, powerSaveBlocker } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const Server = require('./server');
+const GocollectAPI = require('./gocollect-api');
 
 // Chromium bloqueia background windows por default - desabilita antes mesmo
 // de criar o renderer pra garantir que o flag pegue
@@ -63,6 +65,78 @@ ipcMain.handle('fake-gps:get-local-ips', () => {
     };
   } catch (e) {
     return { port: 3477, httpsPort: null, ips: [] };
+  }
+});
+
+// --- v0.1.14: integração com gocollect.fun (listador de beacons) ---
+
+function gocollectTokenPath() {
+  return path.join(app.getPath('userData'), 'gocollect.json');
+}
+
+function readGocollectToken() {
+  try {
+    const raw = fs.readFileSync(gocollectTokenPath(), 'utf8');
+    const obj = JSON.parse(raw);
+    return (obj && typeof obj.token === 'string' && obj.token.length > 0) ? obj.token : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function writeGocollectToken(token) {
+  try {
+    fs.writeFileSync(gocollectTokenPath(), JSON.stringify({
+      token: token,
+      savedAt: Date.now()
+    }, null, 2), 'utf8');
+    return true;
+  } catch (e) {
+    console.warn('[main] falha ao salvar gocollect.json:', e.message);
+    return false;
+  }
+}
+
+function clearGocollectToken() {
+  try { fs.unlinkSync(gocollectTokenPath()); } catch (e) { /* ignore */ }
+}
+
+ipcMain.handle('gocollect:fetch-lures', async (_evt, params) => {
+  const token = readGocollectToken();
+  if (!token) return { ok: false, error: 'no-token' };
+  const lat = params && typeof params.lat === 'number' ? params.lat : null;
+  const lng = params && typeof params.lng === 'number' ? params.lng : null;
+  if (lat === null || lng === null) return { ok: false, error: 'bad-coords' };
+  try {
+    const data = await GocollectAPI.fetchCrates(token, lat, lng);
+    const lures = GocollectAPI.extractNearbyLures(data, lat, lng);
+    return { ok: true, lures: lures, crateCount: data.crates.length };
+  } catch (e) {
+    const code = e.status === 401 ? 'unauthorized' : 'fetch-error';
+    return { ok: false, error: code, message: e.message };
+  }
+});
+
+ipcMain.handle('gocollect:get-token-status', () => {
+  const token = readGocollectToken();
+  return {
+    hasToken: !!token,
+    tokenPreview: token ? (token.slice(0, 6) + '...' + token.slice(-4)) : null
+  };
+});
+
+ipcMain.handle('gocollect:clear-token', () => {
+  clearGocollectToken();
+  return { ok: true };
+});
+
+// Hook pro server.js chamar quando a extension postar o token em /gocollect-token
+Server.setOnGocollectToken((token) => {
+  if (writeGocollectToken(token) && mainWin && !mainWin.isDestroyed()) {
+    mainWin.webContents.send('gocollect:token-updated', {
+      hasToken: true,
+      tokenPreview: token.slice(0, 6) + '...' + token.slice(-4)
+    });
   }
 });
 

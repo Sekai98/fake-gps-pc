@@ -1724,6 +1724,159 @@
     if (!modalTabConfig.classList.contains('hidden') && e.key === 'Escape') closeTabConfig();
   });
 
+  // ===== v0.1.14: Painel de beacons do gocollect =====
+  (function initBeaconsPanel() {
+    const bridge = window.FakeGPSBridge && window.FakeGPSBridge.gocollect;
+    if (!bridge) return;
+
+    const elStatus = document.getElementById('beacons-token-status');
+    const btnRefresh = document.getElementById('btn-beacons-refresh');
+    const btnClear = document.getElementById('btn-beacons-clear-token');
+    const elHint = document.getElementById('beacons-hint');
+    const elList = document.getElementById('beacons-list');
+    let currentLures = [];
+
+    function setTokenState(hasToken, preview) {
+      if (hasToken) {
+        elStatus.textContent = '✓ Token ativo (' + (preview || '...') + ')';
+        elStatus.classList.remove('beacons-token-missing');
+        elStatus.classList.add('beacons-token-ok');
+        btnRefresh.disabled = false;
+        btnClear.style.display = '';
+        elHint.style.display = 'none';
+      } else {
+        elStatus.textContent = '⚠ Sem token';
+        elStatus.classList.remove('beacons-token-ok');
+        elStatus.classList.add('beacons-token-missing');
+        btnRefresh.disabled = true;
+        btnClear.style.display = 'none';
+        elHint.style.display = '';
+        elList.innerHTML = '';
+      }
+    }
+
+    function fmtDistance(m) {
+      if (m < 1000) return Math.round(m) + ' m';
+      return (m / 1000).toFixed(2) + ' km';
+    }
+    function fmtRemaining(endsAt) {
+      const ms = endsAt - Date.now();
+      if (ms < 0) return 'expirado';
+      const min = Math.floor(ms / 60000);
+      const sec = Math.floor((ms % 60000) / 1000);
+      if (min > 0) return min + 'm ' + sec + 's';
+      return sec + 's';
+    }
+
+    function renderLures(lures) {
+      currentLures = lures;
+      if (!lures || lures.length === 0) {
+        elList.innerHTML = '<div class="beacons-list-empty">Nenhum lure ativo na sua área (raio ~2km)</div>';
+        return;
+      }
+      elList.innerHTML = '';
+      lures.slice(0, 10).forEach(function (l, idx) {
+        const kindClass = 'beacon-kind-' + (l.kind || 'beacon').replace(/[^a-z_]/gi, '');
+        const kindLabel = (l.kind || 'beacon').replace('_', ' ');
+        const cardHtml = l.card
+          ? '<div class="beacon-card">🪪 ' + (l.card.name || '?')
+            + ' <span class="beacon-card-value">$' + (l.card.valueUsd || '?') + '</span></div>'
+          : '<div class="beacon-card beacon-meta">(sem card registrado)</div>';
+        const item = document.createElement('div');
+        item.className = 'beacon-item';
+        item.innerHTML =
+          '<div class="beacon-item-head">'
+          + '<span class="beacon-kind ' + kindClass + '">#' + l.id + ' ' + kindLabel + '</span>'
+          + '<span class="beacon-distance">' + fmtDistance(l.distanceMeters) + '</span>'
+          + '</div>'
+          + cardHtml
+          + '<div class="beacon-meta">⏱ expira em ' + fmtRemaining(l.endsAt)
+          + (l.foundByMe ? ' · já pego' : (l.cardFound ? ' · achado por outro' : ' · disponível')) + '</div>'
+          + '<div class="beacon-actions">'
+          + '<button class="beacon-btn-tp" data-idx="' + idx + '">⚡ TP direto</button>'
+          + '<button class="beacon-btn-walk" data-idx="' + idx + '">🚶 Caminhar até</button>'
+          + '</div>';
+        elList.appendChild(item);
+      });
+    }
+
+    async function refresh() {
+      btnRefresh.disabled = true;
+      btnRefresh.textContent = '⏳ ...';
+      try {
+        const Movement = global.FakeGPS && global.FakeGPS.Movement;
+        if (!Movement) throw new Error('Movement module ausente');
+        const snap = Movement.getRaw();
+        const result = await bridge.fetchLures(snap.lat, snap.lon);
+        if (!result.ok) {
+          if (result.error === 'unauthorized') {
+            setTokenState(false);
+            alert('Token do gocollect expirou. Reabra o site logado pra capturar um novo.');
+          } else if (result.error === 'no-token') {
+            setTokenState(false);
+          } else {
+            alert('Erro ao buscar beacons: ' + (result.message || result.error));
+          }
+        } else {
+          renderLures(result.lures);
+        }
+      } catch (e) {
+        alert('Erro: ' + e.message);
+      } finally {
+        btnRefresh.disabled = false;
+        btnRefresh.textContent = '🔄 Atualizar';
+      }
+    }
+
+    btnRefresh.addEventListener('click', refresh);
+
+    btnClear.addEventListener('click', async function () {
+      if (!confirm('Remover token salvo? Vai precisar reabrir gocollect.fun pra capturar de novo.')) return;
+      await bridge.clearToken();
+      setTokenState(false);
+    });
+
+    elList.addEventListener('click', function (e) {
+      const btn = e.target.closest('button[data-idx]');
+      if (!btn) return;
+      const idx = parseInt(btn.getAttribute('data-idx'), 10);
+      const lure = currentLures[idx];
+      if (!lure) return;
+      const Movement = global.FakeGPS && global.FakeGPS.Movement;
+      const AutoPilot = global.FakeGPS && global.FakeGPS.AutoPilot;
+      if (!Movement) return;
+      if (btn.classList.contains('beacon-btn-tp')) {
+        Movement.teleport(lure.lat, lure.lng);
+      } else if (btn.classList.contains('beacon-btn-walk')) {
+        if (AutoPilot && typeof AutoPilot.start === 'function') {
+          const Routing = global.FakeGPS && global.FakeGPS.Routing;
+          if (Routing && typeof Routing.fetchFootRoute === 'function') {
+            const snap = Movement.getRaw();
+            Routing.fetchFootRoute(snap.lat, snap.lon, lure.lat, lure.lng).then(function (route) {
+              AutoPilot.start(route.waypoints);
+            }).catch(function () {
+              // Fallback: linha reta
+              AutoPilot.start([{ lat: Movement.getRaw().lat, lon: Movement.getRaw().lon }, { lat: lure.lat, lon: lure.lng }]);
+            });
+          } else {
+            AutoPilot.start([{ lat: Movement.getRaw().lat, lon: Movement.getRaw().lon }, { lat: lure.lat, lon: lure.lng }]);
+          }
+        } else {
+          Movement.teleport(lure.lat, lure.lng);
+        }
+      }
+    });
+
+    bridge.onTokenUpdated(function (payload) {
+      setTokenState(payload.hasToken, payload.tokenPreview);
+    });
+
+    // Status inicial
+    bridge.getTokenStatus().then(function (st) {
+      setTokenState(st.hasToken, st.tokenPreview);
+    });
+  })();
+
   console.log('%c[Fake GPS PC] v0.1.14 pronto',
     'background:#1a73e8;color:#fff;padding:2px 6px;border-radius:3px');
   console.log('Controles: joystick (mouse) ou WASD/setas | ⏸ pausar sem perder posicao');

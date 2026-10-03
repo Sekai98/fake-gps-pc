@@ -146,7 +146,28 @@ pollOnce();
 window.addEventListener('message', async function (evt) {
   if (evt.source !== window) return;
   const d = evt.data;
-  if (!d || d.__fakegps_crates !== true) return;
+  if (!d) return;
+
+  // v0.1.14: Token Bearer do gocollect capturado automaticamente
+  if (d.__fakegps_gocollect_token === true && typeof d.token === 'string') {
+    let port = activePort;
+    if (!port) {
+      port = await discoverServer();
+      if (!port) return;
+      activePort = port;
+    }
+    try {
+      await fetch('http://' + getServerHost() + ':' + port + '/gocollect-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: d.token, ts: d.ts }),
+        cache: 'no-store'
+      });
+    } catch (e) { /* server caiu, perde esse batch */ }
+    return;
+  }
+
+  if (d.__fakegps_crates !== true) return;
   if (!overrideEnabled) return;
   let port = activePort;
   if (!port) {

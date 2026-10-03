@@ -71,6 +71,10 @@ let lastUpdatedTab = DEFAULT_TAB;
 let onCratesCallback = null;
 function setOnCrates(fn) { onCratesCallback = (typeof fn === 'function') ? fn : null; }
 
+// v0.1.14: Callback do main.js quando a extension postar o token do gocollect.
+let onGocollectTokenCallback = null;
+function setOnGocollectToken(fn) { onGocollectTokenCallback = (typeof fn === 'function') ? fn : null; }
+
 // Lista de abas publicada pelo renderer (v0.1.14 - pra extension listar no dropdown)
 let currentTabsList = [];
 function updateTabsList(tabs) {
@@ -314,6 +318,25 @@ function handler(req, res) {
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true, count: data && data.crates ? data.crates.length : 0 }));
+    }).catch(function (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: err.message }));
+    });
+    return;
+  }
+
+  // v0.1.14: Extension (content.js) posta o Bearer token do gocollect capturado
+  // automaticamente no gocollect.fun. Zero auth (localhost only).
+  if (req.method === 'POST' && req.url === '/gocollect-token') {
+    readJsonBody(req).then(function (data) {
+      if (data && typeof data.token === 'string' && data.token.length > 10) {
+        if (onGocollectTokenCallback) onGocollectTokenCallback(data.token);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      } else {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'token ausente ou inválido' }));
+      }
     }).catch(function (err) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: false, error: err.message }));
@@ -582,6 +605,7 @@ module.exports = {
   start: start,
   updateLocation: updateLocation,
   setOnCrates: setOnCrates,
+  setOnGocollectToken: setOnGocollectToken,
   getLocalIps: getLocalIps,
   updateTabsList: updateTabsList
 };

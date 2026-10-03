@@ -1,7 +1,7 @@
 {
   "name": "fake-gps-pc",
-  "version": "0.1.13",
-  "description": "Fake GPS para PC com joystick virtual + sensor remoto + multi-abas",
+  "version": "0.1.14",
+  "description": "Fake GPS para PC com joystick virtual + sensor remoto + multi-abas + listador de beacons gocollect",
   "main": "src/main.js",
   "private": true,
   "scripts": {

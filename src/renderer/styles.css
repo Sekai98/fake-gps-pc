@@ -1484,3 +1484,45 @@ body { display: flex; flex-direction: column; }
 .leaflet-control-zoom a:hover {
   background: var(--panel-dark) !important;
 }
+
+/* ===== v0.1.14: Painel de beacons do gocollect ===== */
+.beacons-panel { display: flex; flex-direction: column; gap: 8px; }
+.beacons-header { display: flex; align-items: center; gap: 6px; }
+.beacons-token-status { font-size: 11px; padding: 3px 7px; border-radius: 3px; flex: 1; }
+.beacons-token-missing { background: #3a2525; color: #ff6b6b; }
+.beacons-token-ok { background: #253a25; color: #6bff8e; }
+.beacons-refresh-btn {
+  background: #2a3744; color: #e8eaed; border: 1px solid #3a4855;
+  padding: 4px 10px; border-radius: 3px; cursor: pointer; font-size: 12px;
+}
+.beacons-refresh-btn:hover:not(:disabled) { background: #3a4855; }
+.beacons-refresh-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.beacons-clear-btn {
+  background: transparent; color: #9aa0a6; border: 1px solid #3a4855;
+  padding: 2px 7px; border-radius: 3px; cursor: pointer; font-size: 12px;
+}
+.beacons-clear-btn:hover { background: #3a2525; color: #ff6b6b; }
+.beacons-hint { font-size: 11px; color: #9aa0a6; line-height: 1.4; padding: 4px 0; }
+.beacons-list { display: flex; flex-direction: column; gap: 6px; max-height: 340px; overflow-y: auto; }
+.beacon-item {
+  background: #1a2029; border: 1px solid #2a3744; border-radius: 4px;
+  padding: 7px 9px; display: flex; flex-direction: column; gap: 4px;
+}
+.beacon-item-head { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.beacon-kind { font-weight: bold; }
+.beacon-kind-beacon { color: #4285f4; }
+.beacon-kind-gold_rush { color: #f9ab00; }
+.beacon-distance { color: #9aa0a6; margin-left: auto; font-variant-numeric: tabular-nums; }
+.beacon-card { font-size: 11px; color: #e8eaed; }
+.beacon-card-value { color: #6bff8e; font-weight: bold; }
+.beacon-meta { font-size: 10px; color: #777; }
+.beacon-actions { display: flex; gap: 6px; margin-top: 2px; }
+.beacon-btn-tp, .beacon-btn-walk {
+  flex: 1; padding: 4px 6px; border-radius: 3px; border: none;
+  cursor: pointer; font-size: 11px; font-weight: bold;
+}
+.beacon-btn-tp { background: #c62828; color: #fff; }
+.beacon-btn-tp:hover { background: #e53935; }
+.beacon-btn-walk { background: #0f9d58; color: #fff; }
+.beacon-btn-walk:hover { background: #4caf50; }
+.beacons-list-empty { font-size: 11px; color: #777; text-align: center; padding: 10px; }
