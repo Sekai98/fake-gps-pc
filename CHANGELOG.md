@@ -2,6 +2,34 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
+## [0.1.24] - 2026-10-03 (Electron) - Captura passiva de lures via extension (zero scan ativo)
+
+### Added
+- **Lures capturados pela extension alimentam o painel automaticamente**: quando o user joga no gocollect.fun no Brave, cada chamada `/v1/crates` que o site faz é interceptada pela extensão (já era pra crates), agora o `onCrates` do app.js também processa `payload.lures`:
+  - Dedupe por `lure.id`
+  - Calcula `distanceMeters` do centro atual (scanCenter OU avatar)
+  - Alimenta `scanLuresMap` → `throttledRenderLures()`
+  - Resultado: **zero scan ativo** necessário pra ver lures ao redor do avatar
+- Helper local `haversineMetersLocal` com fallback (usa `FakeGPS.Routing.haversine` se disponível)
+
+### How it works
+```
+User joga no gocollect.fun
+  → Site chama /v1/crates (mover mapa, zoom, polling interno)
+  → Extension inject.js intercepta a response (já fazia pra token/crates)
+  → content.js POSTA no server local (http://127.0.0.1:3477/crates)
+  → main.js emite 'fake-gps:crates' pro renderer
+  → app.js onCrates: alimenta scanLuresMap + atualiza painel
+```
+
+### Limitation
+- Só vê lures da **área que o site está olhando** (= área do avatar fake). Pra monitorar OUTRA região sem mover avatar, scan ativo continua necessário.
+
+### Files
+- EDIT `src/renderer/app.js` (novo handler onCrates que processa payload.lures)
+- EDIT `src/renderer/index.html` (v0.1.24)
+- EDIT `package.json` + `poc-extension/manifest.json` (0.1.23 → 0.1.24, simetria)
+
 ## [0.1.23] - 2026-10-03 (Electron) - Raio sem limite + fix bug grid buracos + fix persistência
 
 ### Fixed

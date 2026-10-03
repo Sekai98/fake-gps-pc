@@ -1995,6 +1995,43 @@
       if (changed) refreshMapCrates();
     });
 
+    // v0.1.24: Captura passiva - lures interceptados pela extension (payload /crates que o
+    // browser já recebe quando user joga normalmente) alimentam o painel. Zero scan ativo
+    // necessário pra ver lures da área do avatar.
+    function haversineMetersLocal(lat1, lon1, lat2, lon2) {
+      const Routing = global.FakeGPS && global.FakeGPS.Routing;
+      if (Routing && typeof Routing.haversine === 'function') {
+        return Routing.haversine(lat1, lon1, lat2, lon2);
+      }
+      // Fallback inline
+      const R = 6371000, toRad = Math.PI / 180;
+      const dLat = (lat2 - lat1) * toRad, dLon = (lon2 - lon1) * toRad;
+      const a = Math.sin(dLat / 2) ** 2
+        + Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.sin(dLon / 2) ** 2;
+      return 2 * R * Math.asin(Math.sqrt(a));
+    }
+    if (window.FakeGPSBridge && typeof window.FakeGPSBridge.onCrates === 'function') {
+      window.FakeGPSBridge.onCrates(function (payload) {
+        if (!payload || !Array.isArray(payload.lures) || payload.lures.length === 0) return;
+        const Movement = global.FakeGPS && global.FakeGPS.Movement;
+        if (!Movement) return;
+        const snap = Movement.getRaw();
+        const centerLat = scanCenter ? scanCenter.lat : snap.lat;
+        const centerLng = scanCenter ? scanCenter.lng : snap.lon;
+        let added = 0;
+        payload.lures.forEach(function (l) {
+          if (!l || typeof l.id === 'undefined') return;
+          if (!scanLuresMap[l.id]) {
+            scanLuresMap[l.id] = Object.assign({}, l, {
+              distanceMeters: haversineMetersLocal(centerLat, centerLng, l.lat, l.lng)
+            });
+            added++;
+          }
+        });
+        if (added > 0) throttledRenderLures();
+      });
+    }
+
     function setTokenState(hasToken, preview) {
       if (hasToken) {
         elStatus.textContent = '✓ Token ativo (' + (preview || '...') + ')';
