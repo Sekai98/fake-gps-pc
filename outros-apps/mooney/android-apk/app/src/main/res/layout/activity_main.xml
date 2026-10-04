@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0f1419"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Step Tracker"
+            android:textColor="#4caf50"
+            android:textSize="32sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:paddingTop="30dp"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="v0.1.0 — PoC Health Connect"
+            android:textColor="#9aa0a6"
+            android:textSize="13sp"
+            android:gravity="center"
+            android:paddingBottom="40dp"/>
+
+        <TextView
+            android:id="@+id/status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Inicializando..."
+            android:textColor="#e8eaed"
+            android:textSize="14sp"
+            android:background="#1a2029"
+            android:padding="12dp"
+            android:layout_marginBottom="24dp"/>
+
+        <Button
+            android:id="@+id/btn_inject"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:text="▶  Injetar 1000 passos AGORA"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textAllCaps="false"
+            android:backgroundTint="#4caf50"
+            android:enabled="false"/>
+
+        <TextView
+            android:id="@+id/last_event"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Último: nenhum"
+            android:textColor="#9aa0a6"
+            android:textSize="13sp"
+            android:paddingTop="24dp"/>
+
+        <TextView
+            android:id="@+id/today_total"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Hoje: carregando..."
+            android:textColor="#4caf50"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:paddingTop="12dp"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Como testar com Mooney:\n\n1. Instale e abra o Mooney\n2. Em Config, conecte à Health Connect\n3. Volte aqui, injete 1000 passos\n4. Abra o Mooney e veja se o contador subiu\n\n⚠ Use conta scout/queimável. Mooney/Weward podem detectar e banir."
+            android:textColor="#9aa0a6"
+            android:textSize="12sp"
+            android:paddingTop="40dp"
+            android:lineSpacingExtra="4dp"/>
+
+    </LinearLayout>
+</ScrollView>

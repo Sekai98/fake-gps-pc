@@ -1,0 +1,57 @@
+name: Mooney Step Tracker APK Build
+
+# Compila APK debug toda vez que push muda arquivos em outros-apps/mooney/**
+# Baixar o APK: GitHub -> Actions -> run ultimo -> Artifacts -> step-tracker-apk-<versao>.zip
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'outros-apps/mooney/**'
+      - '.github/workflows/mooney-build.yml'
+  pull_request:
+    paths:
+      - 'outros-apps/mooney/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK (pre-instalado no runner Ubuntu)
+        run: |
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.7'
+
+      - name: Extract versionName
+        id: version
+        run: |
+          VERSION=$(grep 'versionName' outros-apps/mooney/android-apk/app/build.gradle | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Versao detectada: $VERSION"
+
+      - name: Build debug APK
+        working-directory: outros-apps/mooney/android-apk
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: step-tracker-apk-${{ steps.version.outputs.version }}
+          path: outros-apps/mooney/android-apk/app/build/outputs/apk/debug/*.apk
+          retention-days: 30
