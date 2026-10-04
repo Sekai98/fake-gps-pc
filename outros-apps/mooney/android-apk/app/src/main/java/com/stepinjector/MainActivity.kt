@@ -1,14 +1,12 @@
 package com.stepinjector
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
+import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
-import android.os.PowerManager
 import android.provider.Settings
 import android.widget.Button
 import android.widget.TextView
@@ -38,11 +36,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusLocation: TextView
     private lateinit var statusHealth: TextView
     private lateinit var statusNotif: TextView
-    private lateinit var statusBattery: TextView
+    private lateinit var statusMock: TextView
     private lateinit var btnPermLocation: Button
     private lateinit var btnPermHealth: Button
     private lateinit var btnPermNotif: Button
-    private lateinit var btnPermBattery: Button
+    private lateinit var btnOpenDev: Button
     private lateinit var btnOpenMap: Button
     private lateinit var btnStop: Button
     private lateinit var todayLabel: TextView
@@ -66,11 +64,11 @@ class MainActivity : AppCompatActivity() {
         statusLocation = findViewById(R.id.status_location)
         statusHealth = findViewById(R.id.status_health)
         statusNotif = findViewById(R.id.status_notif)
-        statusBattery = findViewById(R.id.status_battery)
+        statusMock = findViewById(R.id.status_mock)
         btnPermLocation = findViewById(R.id.btn_perm_location)
         btnPermHealth = findViewById(R.id.btn_perm_health)
         btnPermNotif = findViewById(R.id.btn_perm_notif)
-        btnPermBattery = findViewById(R.id.btn_perm_battery)
+        btnOpenDev = findViewById(R.id.btn_open_dev)
         btnOpenMap = findViewById(R.id.btn_open_map)
         btnStop = findViewById(R.id.btn_stop)
         todayLabel = findViewById(R.id.today_label)
@@ -78,7 +76,7 @@ class MainActivity : AppCompatActivity() {
         btnPermLocation.setOnClickListener { requestLocationPerm() }
         btnPermHealth.setOnClickListener { requestHealthPerms.launch(healthPermissions) }
         btnPermNotif.setOnClickListener { requestNotifPerm() }
-        btnPermBattery.setOnClickListener { requestBatteryExemption() }
+        btnOpenDev.setOnClickListener { openDevSettings() }
         btnOpenMap.setOnClickListener { openMap() }
         btnStop.setOnClickListener { stopService() }
     }
@@ -98,16 +96,36 @@ class MainActivity : AppCompatActivity() {
                 PackageManager.PERMISSION_GRANTED
         else true
 
-    private fun hasBatteryExemption(): Boolean {
-        if (Build.VERSION.SDK_INT < 23) return true
-        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-        return pm.isIgnoringBatteryOptimizations(packageName)
+    /**
+     * Tenta registrar + remover um test provider pra ver se o user configurou
+     * "App de localização simulada" nas Opções de Desenvolvedor.
+     * Retorna true se conseguiu (= app é o mock location autorizado).
+     */
+    private fun hasMockLocationPermission(): Boolean {
+        return try {
+            val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+            lm.addTestProvider(
+                LocationManager.GPS_PROVIDER,
+                false, false, false, false, true, true, true,
+                android.location.Criteria.POWER_LOW,
+                android.location.Criteria.ACCURACY_FINE
+            )
+            lm.removeTestProvider(LocationManager.GPS_PROVIDER)
+            true
+        } catch (e: SecurityException) {
+            false
+        } catch (e: IllegalArgumentException) {
+            // Provider já estava registrado = outro app ou nosso service rodando
+            true
+        } catch (e: Exception) {
+            false
+        }
     }
 
     private fun refreshStatus() {
         val loc = hasLocation()
         val notif = hasNotif()
-        val battery = hasBatteryExemption()
+        val mock = hasMockLocationPermission()
 
         statusLocation.text = if (loc) "✓ Localização" else "✗ Falta localização"
         btnPermLocation.visibility = if (loc) android.view.View.GONE else android.view.View.VISIBLE
@@ -116,8 +134,8 @@ class MainActivity : AppCompatActivity() {
         btnPermNotif.visibility = if (notif || Build.VERSION.SDK_INT < 33)
             android.view.View.GONE else android.view.View.VISIBLE
 
-        statusBattery.text = if (battery) "✓ Bateria sem restrição" else "✗ Otimização de bateria ligada (service pode ser morto)"
-        btnPermBattery.visibility = if (battery) android.view.View.GONE else android.view.View.VISIBLE
+        statusMock.text = if (mock) "✓ Mock GPS configurado" else "✗ Falta: Opções de Dev → App de localização simulada = Step Tracker"
+        btnOpenDev.visibility = if (mock) android.view.View.GONE else android.view.View.VISIBLE
 
         // Health Connect
         val sdkStatus = HealthConnectClient.getSdkStatus(this)
@@ -133,7 +151,7 @@ class MainActivity : AppCompatActivity() {
                     val ok = granted.containsAll(healthPermissions)
                     statusHealth.text = if (ok) "✓ Health Connect" else "✗ Falta Health Connect"
                     btnPermHealth.visibility = if (ok) android.view.View.GONE else android.view.View.VISIBLE
-                    btnOpenMap.isEnabled = loc && notif && ok
+                    btnOpenMap.isEnabled = loc && notif && ok && mock
                 } catch (e: Exception) {
                     statusHealth.text = "✗ Health Connect: ${e.message}"
                 }
@@ -178,20 +196,20 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    @SuppressLint("BatteryLife")
-    private fun requestBatteryExemption() {
-        if (Build.VERSION.SDK_INT < 23) return
+    private fun openDevSettings() {
         try {
-            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
-                .setData(Uri.parse("package:$packageName"))
-            startActivity(intent)
+            startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))
+            Toast.makeText(
+                this,
+                "Procure \"App de localização simulada\" e escolha Step Tracker",
+                Toast.LENGTH_LONG
+            ).show()
         } catch (e: Exception) {
-            // Fallback: abre a tela geral de otimização de bateria
-            try {
-                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-            } catch (e2: Exception) {
-                Toast.makeText(this, "Abra Configurações → Bateria manualmente", Toast.LENGTH_LONG).show()
-            }
+            Toast.makeText(
+                this,
+                "Abra Configurações → Sobre → toque 7x em Número da versão → volta → Opções de Dev → App de localização simulada = Step Tracker",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 

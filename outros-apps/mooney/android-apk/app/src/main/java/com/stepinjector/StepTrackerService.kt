@@ -7,6 +7,8 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.location.Location
+import android.location.LocationManager
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -73,9 +75,15 @@ class StepTrackerService : Service() {
 
     private lateinit var handler: Handler
     private lateinit var engine: MovementEngine
+    private lateinit var locationManager: LocationManager
     private val autopilot = AutoPilot()
     private var healthConnectClient: HealthConnectClient? = null
     private var wakeLock: PowerManager.WakeLock? = null
+
+    // Mock location providers (igual FakeGPS: GPS + NETWORK pra Fused preferir qualquer um)
+    private val PROVIDERS = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
+    private val activeProviders = mutableListOf<String>()
+    private var providerAdded = false
 
     private var running = false
     private var paused = false
@@ -92,6 +100,7 @@ class StepTrackerService : Service() {
     override fun onCreate() {
         super.onCreate()
         handler = Handler(Looper.getMainLooper())
+        locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val lat = java.lang.Double.longBitsToDouble(
             prefs.getLong(KEY_LAT, java.lang.Double.doubleToRawLongBits(-23.561684))
@@ -132,6 +141,7 @@ class StepTrackerService : Service() {
 
         startForeground(NOTIF_ID, buildNotification())
         acquireWakeLock()
+        setupMockProvider()
         lastUpdateMs = 0
         lastFlushMs = System.currentTimeMillis()
         lastPersistMs = lastFlushMs
@@ -147,6 +157,7 @@ class StepTrackerService : Service() {
         // Flush final: injeta o que tiver acumulado
         flushSteps(force = true)
         persistPosition()
+        teardownMockProvider()
         releaseWakeLock()
         if (Build.VERSION.SDK_INT >= 33) {
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -243,6 +254,9 @@ class StepTrackerService : Service() {
                 }
             }
 
+            // Publica mock location a cada tick (10Hz) pra o Android/Mooney verem
+            publishMockLocation()
+
             // Persiste posição a cada 500ms pro mapa WebView ler via SharedPreferences
             val wallNow = System.currentTimeMillis()
             if (wallNow - lastPersistMs >= PERSIST_INTERVAL_MS) {
@@ -314,6 +328,77 @@ class StepTrackerService : Service() {
         accumulatedMeters = 0.0
         lastFlushMs = endMs
         refreshNotification()
+    }
+
+    // --- Mock Location ---
+
+    private fun setupMockProvider() {
+        activeProviders.clear()
+        PROVIDERS.forEach { provider ->
+            try {
+                locationManager.addTestProvider(
+                    provider,
+                    false, false, false, false,
+                    true, true, true,
+                    android.location.Criteria.POWER_LOW,
+                    android.location.Criteria.ACCURACY_FINE
+                )
+                locationManager.setTestProviderEnabled(provider, true)
+                activeProviders.add(provider)
+            } catch (e: SecurityException) {
+                // User não configurou "App de localização simulada" em Opções de Dev
+                android.util.Log.w("StepTracker", "mock provider $provider SecurityException: ${e.message}")
+            } catch (e: IllegalArgumentException) {
+                // Provider já existe
+                try {
+                    locationManager.setTestProviderEnabled(provider, true)
+                    activeProviders.add(provider)
+                } catch (ignored: Exception) {}
+            }
+        }
+        providerAdded = activeProviders.isNotEmpty()
+    }
+
+    private fun teardownMockProvider() {
+        if (!providerAdded) return
+        activeProviders.forEach { provider ->
+            try {
+                locationManager.setTestProviderEnabled(provider, false)
+                locationManager.removeTestProvider(provider)
+            } catch (ignored: Exception) {}
+        }
+        activeProviders.clear()
+        providerAdded = false
+    }
+
+    private fun publishMockLocation() {
+        if (!providerAdded) return
+        val lat = engine.lat
+        val lon = engine.lon
+        val speed = engine.speedMps
+        val heading = engine.heading
+        val now = System.currentTimeMillis()
+        val elapsed = SystemClock.elapsedRealtimeNanos()
+        activeProviders.forEach { provider ->
+            try {
+                val loc = Location(provider).apply {
+                    latitude = lat
+                    longitude = lon
+                    altitude = 0.0
+                    accuracy = 2f
+                    time = now
+                    elapsedRealtimeNanos = elapsed
+                    this.speed = speed
+                    bearing = heading
+                    if (Build.VERSION.SDK_INT >= 26) {
+                        bearingAccuracyDegrees = 1f
+                        speedAccuracyMetersPerSecond = 0.5f
+                        verticalAccuracyMeters = 3f
+                    }
+                }
+                locationManager.setTestProviderLocation(provider, loc)
+            } catch (ignored: Exception) {}
+        }
     }
 
     // --- Persistência ---

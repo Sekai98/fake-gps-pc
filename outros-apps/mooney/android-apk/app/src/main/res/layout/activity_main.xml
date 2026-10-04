@@ -24,7 +24,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="v0.2.2 — Autopilot + Health Connect"
+            android:text="v0.3.0 — Mock GPS + Autopilot + Health Connect"
             android:textColor="#9aa0a6"
             android:textSize="13sp"
             android:gravity="center"
@@ -101,18 +101,18 @@
             android:layout_marginTop="4dp"/>
 
         <TextView
-            android:id="@+id/status_battery"
+            android:id="@+id/status_mock"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="○ Otimização de bateria"
+            android:text="○ Mock GPS"
             android:textColor="#e8eaed"
             android:textSize="14sp"
             android:paddingTop="12dp"/>
         <Button
-            android:id="@+id/btn_perm_battery"
+            android:id="@+id/btn_open_dev"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Desligar otimização de bateria"
+            android:text="Abrir Opções de Desenvolvedor"
             android:textAllCaps="false"
             android:layout_marginTop="4dp"/>
 
@@ -149,7 +149,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Como usar:\n\n1. Autoriza as 4 permissões acima\n2. Abre Mooney e conecta Health Connect\n3. Volta aqui, clica Abrir mapa\n4. Escolhe velocidade (5/12/20 km/h) e clica em um ponto do mapa\n5. Clica Andar — passos aparecem no Mooney em tempo real\n\nSegundo plano: se seu celular é Xiaomi/Oppo/Huawei/Realme, ative autostart manualmente em Settings → Apps → Step Tracker → Autostart. Sem isso o sistema pode matar o service.\n\n⚠ Use conta scout/queimável. Mooney/Weward podem detectar e banir."
+            android:text="Como usar:\n\n1. Ative Opções de Desenvolvedor (Settings → Sobre → toque 7x em Número da versão)\n2. Em Opções de Dev → App de localização simulada → selecione Step Tracker\n3. Autoriza as permissões acima\n4. Abre Mooney e conecta Health Connect\n5. Volta aqui → Abrir mapa → escolhe velocidade e destino → Andar\n\nResultado: Android reporta localização falsa pros outros apps + injeta passos no Health Connect.\n\n⚠ Use conta scout/queimável. Mooney/Weward podem detectar e banir."
             android:textColor="#9aa0a6"
             android:textSize="12sp"
             android:paddingTop="30dp"

@@ -4,6 +4,42 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
 Projeto independente do Fake GPS PC — tem versionamento próprio.
 
+## [0.3.0] - 2026-10-04 - Mock GPS: Android reporta localização falsa
+
+Mudança de arquitetura. Agora o Step Tracker **não é só injetor de passos** — é injetor combinado: mock location (igual FakeGPS APK) + passos no Health Connect. Isso torna o movimento consistente pra qualquer app que compare GPS vs passos (antifraud).
+
+### Added
+- Permissão `ACCESS_MOCK_LOCATION` (com `tools:ignore` pra lint)
+- Permissão `FOREGROUND_SERVICE_LOCATION`
+- `foregroundServiceType="location"` no service
+- `StepTrackerService.setupMockProvider()`: registra GPS_PROVIDER + NETWORK_PROVIDER como test providers (igual FakeGPS)
+- `publishMockLocation()`: a cada tick (10Hz) chama `setTestProviderLocation()` com lat/lon/speed/bearing do engine
+- `teardownMockProvider()`: unregister ao parar o service
+- MainActivity: linha "Mock GPS configurado" no checklist + botão "Abrir Opções de Desenvolvedor" (`Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS`)
+- Detecção automática: tenta `addTestProvider` + `removeTestProvider`; se der SecurityException = user ainda não configurou "App de localização simulada" nas Opções de Dev
+- Instrução no texto de ajuda: como ativar Opções de Dev (toque 7x em Número da versão)
+
+### Removed
+- Permissão `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` (não precisamos — foreground service type=location sozinho já tem exceção)
+- Permissão `FOREGROUND_SERVICE_HEALTH` (service type agora é location)
+- Linha "Bateria" no checklist + código de battery exemption
+
+### Why remove battery exemption
+Foreground services com `foregroundServiceType="location"` já têm isenção especial do Android pra rodar em background enquanto há notificação ongoing. A permissão `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` era redundante dado esse tipo.
+
+### Pré-requisito do user (setup único)
+1. Settings → Sobre o telefone → toque 7x em "Número da versão"
+2. Settings → Sistema → Opções de desenvolvedor → "App de localização simulada" → Step Tracker
+
+Depois disso, o botão `btnOpenMap` só habilita quando mock + localização + health + notif estão todos OK.
+
+### Files
+- EDIT `android-apk/app/src/main/AndroidManifest.xml`
+- EDIT `android-apk/app/src/main/java/com/stepinjector/StepTrackerService.kt`
+- EDIT `android-apk/app/src/main/java/com/stepinjector/MainActivity.kt`
+- EDIT `android-apk/app/src/main/res/layout/activity_main.xml`
+- EDIT `android-apk/app/build.gradle` (versionCode 6→7, versionName 0.2.2→0.3.0)
+
 ## [0.2.2] - 2026-10-04 - Marker em tempo real + battery exemption
 
 ### Fixed
