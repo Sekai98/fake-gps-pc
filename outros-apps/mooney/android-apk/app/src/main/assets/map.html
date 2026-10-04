@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Step Tracker Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    html, body { margin: 0; height: 100%; background: #0f1419; color: #e8eaed; font-family: sans-serif; }
+    #map { position: absolute; top: 0; bottom: 150px; left: 0; right: 0; }
+    #bar {
+      position: absolute; bottom: 0; left: 0; right: 0; height: 150px;
+      background: #1a2029; border-top: 1px solid #333a44; padding: 10px 14px;
+      box-sizing: border-box;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    #info { font-size: 12px; color: #9aa0a6; min-height: 16px; }
+    .row { display: flex; gap: 6px; }
+    .speed-btn {
+      flex: 1; background: #2a3744; color: #e8eaed; border: 1px solid #3a4855;
+      padding: 10px; border-radius: 5px; font-size: 14px; font-weight: bold;
+      touch-action: manipulation; cursor: pointer;
+    }
+    .speed-btn.active { background: #4caf50; color: #fff; border-color: #4caf50; }
+    .action-btn {
+      background: #4285f4; color: #fff; border: none; padding: 12px;
+      border-radius: 5px; font-size: 14px; font-weight: bold; cursor: pointer;
+      touch-action: manipulation;
+    }
+    .action-btn.walk { background: #4caf50; flex: 2; }
+    .action-btn.walk.selecting { background: #f9ab00; color: #000; }
+    .action-btn.teleport { background: #9c27b0; flex: 1; }
+    .action-btn.pause { background: #f9ab00; color: #000; flex: 1; }
+    .action-btn.stop { background: #e53935; flex: 1; }
+    .action-btn:disabled { background: #333a44; color: #666; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="bar">
+    <div class="row">
+      <button class="speed-btn" data-kmh="5">🚶 5 km/h</button>
+      <button class="speed-btn active" data-kmh="12">🏃 12 km/h</button>
+      <button class="speed-btn" data-kmh="20">🚴 20 km/h</button>
+    </div>
+    <div class="row">
+      <button class="action-btn walk" id="btn-walk">▶ Andar até...</button>
+      <button class="action-btn teleport" id="btn-teleport">⚡ TP</button>
+      <button class="action-btn pause" id="btn-pause" style="display:none">⏸</button>
+    </div>
+    <div id="info">Escolhe uma velocidade e clica Andar até... depois toca no mapa.</div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    function callAndroid(method, arg1, arg2) {
+      try {
+        if (window.Android && typeof window.Android[method] === 'function') {
+          if (arg2 !== undefined) return window.Android[method](arg1, arg2);
+          if (arg1 !== undefined) return window.Android[method](arg1);
+          return window.Android[method]();
+        }
+      } catch (e) { console.error(e); }
+      return null;
+    }
+
+    const initLatLon = (function () {
+      try {
+        const raw = callAndroid('getInitialLatLon');
+        if (raw) { const o = JSON.parse(raw); return [o.lat, o.lon]; }
+      } catch (e) {}
+      return [-23.561684, -46.655981];
+    })();
+
+    const map = L.map('map').setView(initLatLon, 16);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '© OSM'
+    }).addTo(map);
+
+    const youIcon = L.divIcon({
+      className: 'you-marker',
+      html: '<div style="width:16px;height:16px;background:#4caf50;border:3px solid #fff;border-radius:50%;box-shadow:0 0 8px #4caf50;"></div>',
+      iconSize: [22, 22], iconAnchor: [11, 11]
+    });
+    const youMarker = L.marker(initLatLon, { icon: youIcon }).addTo(map);
+    let destMarker = null;
+    let routeLine = null;
+
+    const info = document.getElementById('info');
+    const btnWalk = document.getElementById('btn-walk');
+    const btnTeleport = document.getElementById('btn-teleport');
+    const btnPause = document.getElementById('btn-pause');
+    const speedBtns = document.querySelectorAll('.speed-btn');
+
+    let mode = 'idle';      // 'idle' | 'picking-walk' | 'picking-tp' | 'walking' | 'paused'
+    let currentKmh = 12;
+
+    // Velocidades
+    speedBtns.forEach(btn => {
+      btn.addEventListener('click', function () {
+        speedBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentKmh = parseInt(btn.getAttribute('data-kmh'), 10);
+        callAndroid('setSpeed', currentKmh);
+        info.textContent = 'Velocidade: ' + currentKmh + ' km/h';
+      });
+    });
+    // Dispara setSpeed inicial pra sincronizar com a velocidade default
+    callAndroid('setSpeed', currentKmh);
+
+    btnWalk.addEventListener('click', function () {
+      if (mode === 'walking' || mode === 'paused') {
+        // Parar o andar
+        callAndroid('stop');
+        clearRoute();
+        setMode('idle');
+      } else if (mode === 'picking-walk') {
+        setMode('idle');
+      } else {
+        setMode('picking-walk');
+      }
+    });
+
+    btnTeleport.addEventListener('click', function () {
+      if (mode === 'picking-tp') {
+        setMode('idle');
+      } else {
+        setMode('picking-tp');
+      }
+    });
+
+    btnPause.addEventListener('click', function () {
+      if (mode === 'paused') {
+        callAndroid('resume');
+        setMode('walking');
+      } else if (mode === 'walking') {
+        callAndroid('pause');
+        setMode('paused');
+      }
+    });
+
+    function setMode(m) {
+      mode = m;
+      btnWalk.classList.remove('selecting');
+      if (m === 'idle') {
+        btnWalk.textContent = '▶ Andar até...';
+        btnWalk.disabled = false;
+        btnTeleport.disabled = false;
+        btnPause.style.display = 'none';
+        info.textContent = 'Escolhe uma velocidade e clica Andar até...';
+      } else if (m === 'picking-walk') {
+        btnWalk.textContent = '✕ Cancelar';
+        btnWalk.classList.add('selecting');
+        info.textContent = 'Toca no mapa pra escolher destino (' + currentKmh + ' km/h)';
+      } else if (m === 'picking-tp') {
+        info.textContent = '⚡ Toca no mapa pra teleportar (sem gerar passos)';
+      } else if (m === 'walking') {
+        btnWalk.textContent = '⏹ Parar';
+        btnPause.style.display = '';
+        btnPause.textContent = '⏸';
+      } else if (m === 'paused') {
+        btnWalk.textContent = '⏹ Parar';
+        btnPause.style.display = '';
+        btnPause.textContent = '▶';
+        info.textContent = 'Pausado';
+      }
+    }
+
+    function clearRoute() {
+      if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+      if (destMarker) { map.removeLayer(destMarker); destMarker = null; }
+    }
+
+    map.on('click', function (e) {
+      const lat = e.latlng.lat;
+      const lon = e.latlng.lng;
+      if (mode === 'picking-walk') {
+        clearRoute();
+        destMarker = L.marker([lat, lon]).addTo(map);
+        info.textContent = 'Buscando rota...';
+        callAndroid('startRoute', lat, lon);
+      } else if (mode === 'picking-tp') {
+        callAndroid('teleport', lat, lon);
+        setMode('idle');
+      }
+    });
+
+    // Polling do marker azul (lê posição atual do service)
+    let lastPolledLat = initLatLon[0];
+    let lastPolledLon = initLatLon[1];
+    setInterval(function () {
+      try {
+        const raw = callAndroid('getCurrentPosition');
+        if (!raw) return;
+        const o = JSON.parse(raw);
+        if (typeof o.lat !== 'number' || typeof o.lon !== 'number') return;
+        if (o.lat === lastPolledLat && o.lon === lastPolledLon) return;
+        lastPolledLat = o.lat;
+        lastPolledLon = o.lon;
+        youMarker.setLatLng([o.lat, o.lon]);
+      } catch (e) {}
+    }, 1000);
+
+    // API chamada pelo Android (evaluateJavascript)
+    window.StepTracker = {
+      onRouteReady: function (waypointsJson, distanceM) {
+        const pts = JSON.parse(waypointsJson);
+        if (routeLine) map.removeLayer(routeLine);
+        routeLine = L.polyline(pts.map(p => [p.lat, p.lon]), {
+          color: '#f9ab00', weight: 4, opacity: 0.85
+        }).addTo(map);
+        const km = (distanceM / 1000).toFixed(2);
+        const minutes = Math.round((distanceM / 1000) / currentKmh * 60);
+        info.textContent = 'Rota: ' + km + ' km (~' + minutes + ' min a ' + currentKmh + ' km/h)';
+        setMode('walking');
+      },
+      onRouteError: function (msg) {
+        info.textContent = 'Erro na rota: ' + msg;
+        setMode('idle');
+        clearRoute();
+      },
+      onRouteDone: function () {
+        info.textContent = 'Chegou!';
+        clearRoute();
+        setMode('idle');
+      },
+      onTeleported: function (lat, lon) {
+        youMarker.setLatLng([lat, lon]);
+        info.textContent = 'TP: ' + lat.toFixed(5) + ', ' + lon.toFixed(5);
+      }
+    };
+  </script>
+</body>
+</html>

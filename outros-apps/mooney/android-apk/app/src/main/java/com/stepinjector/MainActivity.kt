@@ -1,170 +1,204 @@
 package com.stepinjector
 
+import android.Manifest
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
+import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
 
 /**
- * PoC v0.1.0 — Botão único que injeta 1000 passos no Health Connect.
- * Depois a gente valida se Mooney/Weward leem.
+ * Tela inicial: checa permissões + mostra status + botão pra abrir o mapa.
  */
 class MainActivity : AppCompatActivity() {
 
-    private var healthConnectClient: HealthConnectClient? = null
-    private lateinit var status: TextView
-    private lateinit var btnInject: Button
-    private lateinit var lastEvent: TextView
-    private lateinit var todayTotal: TextView
+    private lateinit var statusLocation: TextView
+    private lateinit var statusHealth: TextView
+    private lateinit var statusNotif: TextView
+    private lateinit var btnPermLocation: Button
+    private lateinit var btnPermHealth: Button
+    private lateinit var btnPermNotif: Button
+    private lateinit var btnOpenMap: Button
+    private lateinit var btnStop: Button
+    private lateinit var todayLabel: TextView
 
-    private val requiredPermissions = setOf(
+    private val PERM_LOCATION_CODE = 1001
+    private val PERM_NOTIF_CODE = 1002
+
+    private val healthPermissions = setOf(
         HealthPermission.getWritePermission(StepsRecord::class),
         HealthPermission.getReadPermission(StepsRecord::class)
     )
 
-    private val requestPermissions = registerForActivityResult(
+    private val requestHealthPerms = registerForActivityResult(
         PermissionController.createRequestPermissionResultContract()
-    ) { granted ->
-        if (granted.containsAll(requiredPermissions)) {
-            status.text = "✓ Permissões concedidas"
-            btnInject.isEnabled = true
-            refreshToday()
-        } else {
-            status.text = "✗ Permissões negadas — abra Health Connect e autorize"
-            btnInject.isEnabled = false
-        }
-    }
+    ) { refreshStatus() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        status = findViewById(R.id.status)
-        btnInject = findViewById(R.id.btn_inject)
-        lastEvent = findViewById(R.id.last_event)
-        todayTotal = findViewById(R.id.today_total)
+        statusLocation = findViewById(R.id.status_location)
+        statusHealth = findViewById(R.id.status_health)
+        statusNotif = findViewById(R.id.status_notif)
+        btnPermLocation = findViewById(R.id.btn_perm_location)
+        btnPermHealth = findViewById(R.id.btn_perm_health)
+        btnPermNotif = findViewById(R.id.btn_perm_notif)
+        btnOpenMap = findViewById(R.id.btn_open_map)
+        btnStop = findViewById(R.id.btn_stop)
+        todayLabel = findViewById(R.id.today_label)
 
-        // Verifica disponibilidade do Health Connect
-        val availability = HealthConnectClient.getSdkStatus(this)
-        when (availability) {
-            HealthConnectClient.SDK_AVAILABLE -> {
-                healthConnectClient = HealthConnectClient.getOrCreate(this)
-                btnInject.setOnClickListener { inject1000() }
-                checkPermissions()
-            }
-            HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> {
-                status.text = "✗ Health Connect precisa ser atualizado. Abra a Play Store."
-                btnInject.isEnabled = false
-            }
-            else -> {
-                status.text = "✗ Health Connect não instalado. Instale via Play Store."
-                btnInject.isEnabled = false
-            }
-        }
-    }
-
-    private fun checkPermissions() {
-        val client = healthConnectClient ?: return
-        CoroutineScope(Dispatchers.Main).launch {
-            try {
-                val granted = client.permissionController.getGrantedPermissions()
-                if (granted.containsAll(requiredPermissions)) {
-                    status.text = "✓ Health Connect pronto"
-                    btnInject.isEnabled = true
-                    refreshToday()
-                } else {
-                    status.text = "⚠ Clique abaixo pra autorizar permissões"
-                    requestPermissions.launch(requiredPermissions)
-                }
-            } catch (e: Exception) {
-                status.text = "Erro ao checar permissões: ${e.message}"
-            }
-        }
-    }
-
-    private fun inject1000() {
-        val client = healthConnectClient ?: return
-        btnInject.isEnabled = false
-        CoroutineScope(Dispatchers.Main).launch {
-            try {
-                val now = ZonedDateTime.now()
-                val durationSec = 600L  // 10 minutos "virtuais" pra 1000 passos (cadência 100/min, realista)
-                val start = now.minusSeconds(durationSec)
-
-                val record = StepsRecord(
-                    count = 1000,
-                    startTime = start.toInstant(),
-                    startZoneOffset = start.offset,
-                    endTime = now.toInstant(),
-                    endZoneOffset = now.offset
-                )
-
-                client.insertRecords(listOf(record))
-
-                val fmt = DateTimeFormatter.ofPattern("HH:mm:ss")
-                lastEvent.text = "Último: 1000 passos às ${now.format(fmt)}"
-                Toast.makeText(
-                    this@MainActivity,
-                    "✓ 1000 passos injetados",
-                    Toast.LENGTH_SHORT
-                ).show()
-                refreshToday()
-            } catch (e: Exception) {
-                Toast.makeText(
-                    this@MainActivity,
-                    "Erro na injeção: ${e.message}",
-                    Toast.LENGTH_LONG
-                ).show()
-                lastEvent.text = "✗ Erro: ${e.message}"
-            } finally {
-                btnInject.isEnabled = true
-            }
-        }
-    }
-
-    private fun refreshToday() {
-        val client = healthConnectClient ?: return
-        CoroutineScope(Dispatchers.Main).launch {
-            try {
-                val now = ZonedDateTime.now()
-                val startOfDay = now.toLocalDate().atStartOfDay(ZoneId.systemDefault())
-
-                val response = client.readRecords(
-                    ReadRecordsRequest(
-                        recordType = StepsRecord::class,
-                        timeRangeFilter = TimeRangeFilter.between(
-                            startOfDay.toInstant(),
-                            now.toInstant()
-                        )
-                    )
-                )
-                val total = response.records.sumOf { it.count }
-                todayTotal.text = "Hoje: $total passos (${response.records.size} registros)"
-            } catch (e: Exception) {
-                todayTotal.text = "Erro leitura: ${e.message}"
-            }
-        }
+        btnPermLocation.setOnClickListener { requestLocationPerm() }
+        btnPermHealth.setOnClickListener { requestHealthPerms.launch(healthPermissions) }
+        btnPermNotif.setOnClickListener { requestNotifPerm() }
+        btnOpenMap.setOnClickListener { openMap() }
+        btnStop.setOnClickListener { stopService() }
     }
 
     override fun onResume() {
         super.onResume()
-        // Atualiza total quando voltar pra app (caso tenha mudado no Mooney/Weward)
-        if (healthConnectClient != null && btnInject.isEnabled) {
-            refreshToday()
+        refreshStatus()
+    }
+
+    private fun hasLocation(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun hasNotif(): Boolean =
+        if (Build.VERSION.SDK_INT >= 33)
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+                PackageManager.PERMISSION_GRANTED
+        else true
+
+    private fun refreshStatus() {
+        val loc = hasLocation()
+        val notif = hasNotif()
+
+        statusLocation.text = if (loc) "✓ Localização" else "✗ Falta localização"
+        btnPermLocation.visibility = if (loc) android.view.View.GONE else android.view.View.VISIBLE
+
+        statusNotif.text = if (notif) "✓ Notificações" else "✗ Falta notificações"
+        btnPermNotif.visibility = if (notif || Build.VERSION.SDK_INT < 33)
+            android.view.View.GONE else android.view.View.VISIBLE
+
+        // Health Connect
+        val sdkStatus = HealthConnectClient.getSdkStatus(this)
+        if (sdkStatus != HealthConnectClient.SDK_AVAILABLE) {
+            statusHealth.text = "✗ Health Connect não instalado"
+            btnPermHealth.visibility = android.view.View.GONE
+            btnOpenMap.isEnabled = false
+        } else {
+            val client = HealthConnectClient.getOrCreate(this)
+            CoroutineScope(Dispatchers.Main).launch {
+                try {
+                    val granted = client.permissionController.getGrantedPermissions()
+                    val ok = granted.containsAll(healthPermissions)
+                    statusHealth.text = if (ok) "✓ Health Connect" else "✗ Falta Health Connect"
+                    btnPermHealth.visibility = if (ok) android.view.View.GONE else android.view.View.VISIBLE
+                    btnOpenMap.isEnabled = loc && notif && ok
+                } catch (e: Exception) {
+                    statusHealth.text = "✗ Health Connect: ${e.message}"
+                }
+            }
+            // Carrega total do dia
+            CoroutineScope(Dispatchers.Main).launch {
+                try {
+                    val now = ZonedDateTime.now()
+                    val startOfDay = now.toLocalDate().atStartOfDay(ZoneId.systemDefault())
+                    val response = client.readRecords(
+                        ReadRecordsRequest(
+                            recordType = StepsRecord::class,
+                            timeRangeFilter = TimeRangeFilter.between(
+                                startOfDay.toInstant(), now.toInstant()
+                            )
+                        )
+                    )
+                    val total = response.records.sumOf { it.count }
+                    todayLabel.text = "Hoje: $total passos (${response.records.size} registros)"
+                } catch (e: Exception) {
+                    todayLabel.text = "Hoje: ? (${e.message})"
+                }
+            }
         }
+    }
+
+    private fun requestLocationPerm() {
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+            PERM_LOCATION_CODE
+        )
+    }
+
+    private fun requestNotifPerm() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                PERM_NOTIF_CODE
+            )
+        }
+    }
+
+    private fun openMap() {
+        if (!hasLocation()) {
+            Toast.makeText(this, "Autorize localização primeiro", Toast.LENGTH_SHORT).show()
+            return
+        }
+        // Pega posição real atual pra passar como ponto inicial
+        try {
+            val fused = LocationServices.getFusedLocationProviderClient(this)
+            fused.lastLocation.addOnSuccessListener { loc ->
+                if (loc != null) {
+                    saveInitialPosition(loc.latitude, loc.longitude)
+                }
+                // Abre mapa independente de ter conseguido ou não
+                startActivity(Intent(this, MapActivity::class.java))
+            }.addOnFailureListener {
+                startActivity(Intent(this, MapActivity::class.java))
+            }
+        } catch (e: SecurityException) {
+            startActivity(Intent(this, MapActivity::class.java))
+        }
+    }
+
+    private fun saveInitialPosition(lat: Double, lon: Double) {
+        getSharedPreferences(StepTrackerService.PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putLong(StepTrackerService.KEY_LAT, java.lang.Double.doubleToRawLongBits(lat))
+            .putLong(StepTrackerService.KEY_LON, java.lang.Double.doubleToRawLongBits(lon))
+            .apply()
+    }
+
+    private fun stopService() {
+        val intent = Intent(this, StepTrackerService::class.java)
+            .setAction(StepTrackerService.ACTION_STOP)
+        startService(intent)
+        Toast.makeText(this, "Service parado", Toast.LENGTH_SHORT).show()
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        refreshStatus()
     }
 }
