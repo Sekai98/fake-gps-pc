@@ -24,7 +24,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="v0.2.0 — Autopilot + Health Connect"
+            android:text="v0.2.1 — Autopilot + Health Connect"
             android:textColor="#9aa0a6"
             android:textSize="13sp"
             android:gravity="center"
@@ -56,7 +56,7 @@
             android:id="@+id/status_location"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="? Localização"
+            android:text="○ Localização"
             android:textColor="#e8eaed"
             android:textSize="14sp"
             android:paddingTop="4dp"/>
@@ -72,7 +72,7 @@
             android:id="@+id/status_health"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="? Health Connect"
+            android:text="○ Health Connect"
             android:textColor="#e8eaed"
             android:textSize="14sp"
             android:paddingTop="12dp"/>
@@ -88,7 +88,7 @@
             android:id="@+id/status_notif"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="? Notificações"
+            android:text="○ Notificações"
             android:textColor="#e8eaed"
             android:textSize="14sp"
             android:paddingTop="12dp"/>

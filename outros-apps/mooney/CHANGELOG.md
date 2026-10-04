@@ -4,6 +4,17 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
 Projeto independente do Fake GPS PC — tem versionamento próprio.
 
+## [0.2.1] - 2026-10-04 - Hotfix build: `?` no XML quebra AAPT
+
+### Fixed
+- Build quebrou no CI: `AAPT: error: resource attr/ Localização not found`
+- Causa: no XML Android, `?` no início de texto é parseado como referência de attr de tema (`?attr/...`). Os placeholders `"? Localização"` / `"? Health Connect"` / `"? Notificações"` em `activity_main.xml` disparavam AAPT linking error.
+- Fix: trocar `?` por `○` (círculo neutro) — mesmo visual de "pendente" sem conflito com sintaxe de attr reference.
+
+### Files
+- EDIT `android-apk/app/src/main/res/layout/activity_main.xml` (`?` → `○` em 3 TextViews; versão exibida 0.2.0→0.2.1)
+- EDIT `android-apk/app/build.gradle` (versionCode 4→5, versionName 0.2.0→0.2.1)
+
 ## [0.2.0] - 2026-10-04 - Autopilot + Health Connect injection (produto real)
 
 Reescrita completa. PoC v0.1.x fica como ensaio no CHANGELOG mas o produto
