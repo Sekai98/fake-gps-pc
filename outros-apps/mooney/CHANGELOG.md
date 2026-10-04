@@ -4,6 +4,17 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
 Projeto independente do Fake GPS PC — tem versionamento próprio.
 
+## [0.1.2] - 2026-10-04 - Hotfix build: Gradle 8.9 no workflow (AGP 8.7 exige)
+
+### Fixed
+- Build quebrou no CI: `Minimum supported Gradle version is 8.9. Current version is 8.7.`
+- AGP 8.7.2 (que subimos em v0.1.1) exige Gradle 8.9+ no runtime
+- Fix: `.github/workflows/mooney-build.yml` → `gradle-version: '8.7'` → `'8.9'`
+
+### Files
+- EDIT `.github/workflows/mooney-build.yml` (Gradle 8.9)
+- EDIT `outros-apps/mooney/android-apk/app/build.gradle` (versionCode 3, versionName 0.1.2)
+
 ## [0.1.1] - 2026-10-04 - Hotfix build: AGP 8.7 + compileSdk 35
 
 ### Fixed
