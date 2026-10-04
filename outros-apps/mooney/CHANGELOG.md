@@ -4,6 +4,28 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
 Projeto independente do Fake GPS PC — tem versionamento próprio.
 
+## [0.2.2] - 2026-10-04 - Marker em tempo real + battery exemption
+
+### Fixed
+- **Marker azul do mapa não andava em tempo real.** `StepTrackerService.persistPosition()` só era chamado em start/stop/teleport — nunca durante o updateLoop. Mapa pollava `getCurrentPosition()` a cada 1s mas lia sempre o valor congelado nas SharedPreferences.
+- **Fix:** persistência da posição a cada 500ms dentro do updateLoop (constante `PERSIST_INTERVAL_MS`), coerente com o polling de 1s do mapa.
+
+### Added
+- Permissão `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` no manifest
+- Botão "Desligar otimização de bateria" na MainActivity que abre o diálogo do sistema (via `Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`)
+- Linha "Bateria" no checklist de permissões — detecta via `PowerManager.isIgnoringBatteryOptimizations()`
+- Aviso sobre autostart em fabricantes chineses (Xiaomi/Oppo/Huawei/Realme) no texto de ajuda
+
+### Design decision
+- Bateria **não bloqueia** o botão "Abrir mapa" — é opcional. Sem exemption, o app funciona enquanto a tela estiver ligada e o mapa aberto. Com exemption, pode rodar com tela bloqueada no bolso.
+
+### Files
+- EDIT `android-apk/app/src/main/java/com/stepinjector/StepTrackerService.kt` (persistência throttled 500ms no loop)
+- EDIT `android-apk/app/src/main/AndroidManifest.xml` (permissão REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+- EDIT `android-apk/app/src/main/java/com/stepinjector/MainActivity.kt` (checagem + botão)
+- EDIT `android-apk/app/src/main/res/layout/activity_main.xml` (TextView + Button de bateria; nota autostart)
+- EDIT `android-apk/app/build.gradle` (versionCode 5→6, versionName 0.2.1→0.2.2)
+
 ## [0.2.1] - 2026-10-04 - Hotfix build: `?` no XML quebra AAPT
 
 ### Fixed

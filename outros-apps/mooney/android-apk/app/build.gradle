@@ -11,8 +11,8 @@ android {
         applicationId "com.stepinjector"
         minSdk 28           // Android 10, requisito mínimo do Health Connect
         targetSdk 34        // comportamento Android 14 (mais estável)
-        versionCode 5
-        versionName "0.2.1"
+        versionCode 6
+        versionName "0.2.2"
     }
 
     buildTypes {

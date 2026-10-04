@@ -19,6 +19,9 @@
     <!-- WakeLock pro service continuar em background -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- Isenção de otimização de bateria (abrir settings pra o user permitir) -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <!-- Internet: Leaflet CDN + tiles OSM + OSRM -->
     <uses-permission android:name="android.permission.INTERNET" />
 

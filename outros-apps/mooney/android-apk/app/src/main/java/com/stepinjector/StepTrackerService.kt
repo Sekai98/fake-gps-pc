@@ -59,6 +59,7 @@ class StepTrackerService : Service() {
 
         const val UPDATE_INTERVAL_MS = 100L     // 10Hz, igual FakeGPS
         const val FLUSH_INTERVAL_MS = 30_000L   // injeta Health Connect a cada 30s
+        const val PERSIST_INTERVAL_MS = 500L    // SharedPreferences lat/lon a cada 500ms (mapa polla 1s)
         const val METERS_PER_STEP = 0.70        // 70cm por passo (adulto médio)
 
         // Keys das SharedPreferences
@@ -80,6 +81,7 @@ class StepTrackerService : Service() {
     private var paused = false
     private var lastUpdateMs: Long = 0
     private var lastFlushMs: Long = 0
+    private var lastPersistMs: Long = 0
     private var accumulatedMeters: Double = 0.0
     private var sessionStartMs: Long = 0
 
@@ -132,6 +134,7 @@ class StepTrackerService : Service() {
         acquireWakeLock()
         lastUpdateMs = 0
         lastFlushMs = System.currentTimeMillis()
+        lastPersistMs = lastFlushMs
         sessionStartMs = lastFlushMs
         accumulatedMeters = 0.0
         handler.post(updateLoop)
@@ -240,8 +243,14 @@ class StepTrackerService : Service() {
                 }
             }
 
-            // Flush periódico pro Health Connect
+            // Persiste posição a cada 500ms pro mapa WebView ler via SharedPreferences
             val wallNow = System.currentTimeMillis()
+            if (wallNow - lastPersistMs >= PERSIST_INTERVAL_MS) {
+                persistPosition()
+                lastPersistMs = wallNow
+            }
+
+            // Flush periódico pro Health Connect
             if (wallNow - lastFlushMs >= FLUSH_INTERVAL_MS) {
                 flushSteps(force = false)
             }

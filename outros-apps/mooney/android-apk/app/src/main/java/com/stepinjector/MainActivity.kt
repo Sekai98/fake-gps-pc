@@ -1,11 +1,15 @@
 package com.stepinjector
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
@@ -34,9 +38,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusLocation: TextView
     private lateinit var statusHealth: TextView
     private lateinit var statusNotif: TextView
+    private lateinit var statusBattery: TextView
     private lateinit var btnPermLocation: Button
     private lateinit var btnPermHealth: Button
     private lateinit var btnPermNotif: Button
+    private lateinit var btnPermBattery: Button
     private lateinit var btnOpenMap: Button
     private lateinit var btnStop: Button
     private lateinit var todayLabel: TextView
@@ -60,9 +66,11 @@ class MainActivity : AppCompatActivity() {
         statusLocation = findViewById(R.id.status_location)
         statusHealth = findViewById(R.id.status_health)
         statusNotif = findViewById(R.id.status_notif)
+        statusBattery = findViewById(R.id.status_battery)
         btnPermLocation = findViewById(R.id.btn_perm_location)
         btnPermHealth = findViewById(R.id.btn_perm_health)
         btnPermNotif = findViewById(R.id.btn_perm_notif)
+        btnPermBattery = findViewById(R.id.btn_perm_battery)
         btnOpenMap = findViewById(R.id.btn_open_map)
         btnStop = findViewById(R.id.btn_stop)
         todayLabel = findViewById(R.id.today_label)
@@ -70,6 +78,7 @@ class MainActivity : AppCompatActivity() {
         btnPermLocation.setOnClickListener { requestLocationPerm() }
         btnPermHealth.setOnClickListener { requestHealthPerms.launch(healthPermissions) }
         btnPermNotif.setOnClickListener { requestNotifPerm() }
+        btnPermBattery.setOnClickListener { requestBatteryExemption() }
         btnOpenMap.setOnClickListener { openMap() }
         btnStop.setOnClickListener { stopService() }
     }
@@ -89,9 +98,16 @@ class MainActivity : AppCompatActivity() {
                 PackageManager.PERMISSION_GRANTED
         else true
 
+    private fun hasBatteryExemption(): Boolean {
+        if (Build.VERSION.SDK_INT < 23) return true
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        return pm.isIgnoringBatteryOptimizations(packageName)
+    }
+
     private fun refreshStatus() {
         val loc = hasLocation()
         val notif = hasNotif()
+        val battery = hasBatteryExemption()
 
         statusLocation.text = if (loc) "✓ Localização" else "✗ Falta localização"
         btnPermLocation.visibility = if (loc) android.view.View.GONE else android.view.View.VISIBLE
@@ -99,6 +115,9 @@ class MainActivity : AppCompatActivity() {
         statusNotif.text = if (notif) "✓ Notificações" else "✗ Falta notificações"
         btnPermNotif.visibility = if (notif || Build.VERSION.SDK_INT < 33)
             android.view.View.GONE else android.view.View.VISIBLE
+
+        statusBattery.text = if (battery) "✓ Bateria sem restrição" else "✗ Otimização de bateria ligada (service pode ser morto)"
+        btnPermBattery.visibility = if (battery) android.view.View.GONE else android.view.View.VISIBLE
 
         // Health Connect
         val sdkStatus = HealthConnectClient.getSdkStatus(this)
@@ -156,6 +175,23 @@ class MainActivity : AppCompatActivity() {
                 arrayOf(Manifest.permission.POST_NOTIFICATIONS),
                 PERM_NOTIF_CODE
             )
+        }
+    }
+
+    @SuppressLint("BatteryLife")
+    private fun requestBatteryExemption() {
+        if (Build.VERSION.SDK_INT < 23) return
+        try {
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                .setData(Uri.parse("package:$packageName"))
+            startActivity(intent)
+        } catch (e: Exception) {
+            // Fallback: abre a tela geral de otimização de bateria
+            try {
+                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            } catch (e2: Exception) {
+                Toast.makeText(this, "Abra Configurações → Bateria manualmente", Toast.LENGTH_LONG).show()
+            }
         }
     }
 
