@@ -5,14 +5,14 @@ plugins {
 
 android {
     namespace 'com.stepinjector'
-    compileSdk 34
+    compileSdk 35           // v0.1.1: necessário pra health-connect-client 1.1.0-alpha11
 
     defaultConfig {
         applicationId "com.stepinjector"
         minSdk 28           // Android 10, requisito mínimo do Health Connect
-        targetSdk 34
-        versionCode 1
-        versionName "0.1.0"
+        targetSdk 34        // mantém comportamento Android 14 (mais estável que 15)
+        versionCode 2
+        versionName "0.1.1"
     }
 
     buildTypes {

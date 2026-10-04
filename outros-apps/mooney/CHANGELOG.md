@@ -4,6 +4,17 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
 Projeto independente do Fake GPS PC — tem versionamento próprio.
 
+## [0.1.1] - 2026-10-04 - Hotfix build: AGP 8.7 + compileSdk 35
+
+### Fixed
+- Build quebrou no CI: `health-connect-client:1.1.0-alpha11` exige `compileSdk 35+`
+- Fix: AGP `8.5.0` → `8.7.2` (suporta Android 15); `compileSdk` `34` → `35`
+- `targetSdk` mantido em `34` (comportamento Android 14 continua, só o SDK de compilação sobe)
+
+### Files
+- EDIT `outros-apps/mooney/android-apk/build.gradle` (AGP 8.7.2)
+- EDIT `outros-apps/mooney/android-apk/app/build.gradle` (compileSdk 35, versionCode 2, versionName 0.1.1)
+
 ## [0.1.0] - 2026-10-03 - PoC inicial
 
 ### Added
