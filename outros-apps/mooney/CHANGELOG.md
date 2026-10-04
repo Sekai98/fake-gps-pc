@@ -4,6 +4,35 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), SemVer.
 
 Projeto independente do Fake GPS PC — tem versionamento próprio.
 
+## [0.3.1] - 2026-10-04 - Service persistente (sobrevive sair do app)
+
+### Fixed
+- **Service parava quando o user saía do app**: autopilot parava, mock GPS parava de reportar, rota era abandonada.
+- **Causa raiz:** `onStartCommand` retornava `START_NOT_STICKY` — se Android/MuMu matasse o service (fora de memória, bg kill agressivo), não era recriado.
+- **Fix:** retorna `START_STICKY`. Se o sistema matar o service, Android recria automaticamente passando `intent = null`.
+
+### Added — Auto-recovery
+Quando `onStartCommand` é chamado com `intent = null` (restart automático pelo Android):
+- Lê posição persistida (`KEY_LAT`/`KEY_LON`) e chama `start()`
+- Lê waypoints da rota ativa persistidos (`KEY_ACTIVE_ROUTE`) e aplica no autopilot
+- Lê flag de pausa persistida (`KEY_PAUSED`)
+- Lê heading persistido (`KEY_HEADING`)
+
+### Added — Novas chaves persistidas
+- `KEY_ACTIVE_ROUTE` (JSON array de waypoints) — gravado em `handleSetRoute`, limpo em `teleport`/`stop`/quando autopilot termina
+- `KEY_PAUSED` — gravado em `handlePause`/`handleResume`
+- `KEY_HEADING` — gravado todo tick do `persistPosition()`
+
+### Behavior rules
+- **`ACTION_STOP` explícito do user** limpa a rota — não auto-recupera no próximo start
+- **Teleport** cancela a rota — mesma lógica
+- **Autopilot termina naturalmente** (chegou no destino) → `persistPosition()` percebe `!autopilot.isActive()` e limpa `KEY_ACTIVE_ROUTE`
+
+### Files
+- EDIT `android-apk/app/src/main/java/com/stepinjector/StepTrackerService.kt`
+- EDIT `android-apk/app/src/main/res/layout/activity_main.xml` (label versão)
+- EDIT `android-apk/app/build.gradle` (versionCode 7→8, versionName 0.3.0→0.3.1)
+
 ## [0.3.0] - 2026-10-04 - Mock GPS: Android reporta localização falsa
 
 Mudança de arquitetura. Agora o Step Tracker **não é só injetor de passos** — é injetor combinado: mock location (igual FakeGPS APK) + passos no Health Connect. Isso torna o movimento consistente pra qualquer app que compare GPS vs passos (antifraud).

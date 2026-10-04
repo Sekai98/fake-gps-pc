@@ -34,3 +34,8 @@ desktop.ini
 .vscode/
 *.swp
 *~
+
+# Reverse engineering workspace (APKs baixados pra análise, descompilações)
+reverse/
+*.apk
+!**/android-apk/**/*.apk

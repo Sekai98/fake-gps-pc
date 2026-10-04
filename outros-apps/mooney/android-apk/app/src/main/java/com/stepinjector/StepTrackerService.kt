@@ -71,6 +71,9 @@ class StepTrackerService : Service() {
         const val KEY_SPEED_KMH = "speed_kmh"
         const val KEY_TODAY_STEPS = "today_steps_injected"
         const val KEY_TODAY_DATE = "today_date_iso"
+        const val KEY_ACTIVE_ROUTE = "active_route_json"  // waypoints da rota ativa, pra recovery
+        const val KEY_PAUSED = "paused"
+        const val KEY_HEADING = "heading"
     }
 
     private lateinit var handler: Handler
@@ -117,19 +120,42 @@ class StepTrackerService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_START -> start(
-                intent.getDoubleExtra(EXTRA_LAT, engine.lat),
-                intent.getDoubleExtra(EXTRA_LON, engine.lon)
-            )
-            ACTION_SET_ROUTE -> handleSetRoute(intent)
-            ACTION_TELEPORT -> handleTeleport(intent)
-            ACTION_PAUSE -> handlePause()
-            ACTION_RESUME -> handleResume()
-            ACTION_SET_SPEED -> handleSetSpeed(intent)
-            ACTION_STOP -> { stop(); stopSelf() }
+        if (intent == null) {
+            // Android recriou o service após ser morto. Auto-recovery com estado persistido.
+            recoverFromPrefs()
+        } else {
+            when (intent.action) {
+                ACTION_START -> start(
+                    intent.getDoubleExtra(EXTRA_LAT, engine.lat),
+                    intent.getDoubleExtra(EXTRA_LON, engine.lon)
+                )
+                ACTION_SET_ROUTE -> handleSetRoute(intent)
+                ACTION_TELEPORT -> handleTeleport(intent)
+                ACTION_PAUSE -> handlePause()
+                ACTION_RESUME -> handleResume()
+                ACTION_SET_SPEED -> handleSetSpeed(intent)
+                ACTION_STOP -> { stop(); stopSelf() }
+            }
         }
-        return START_NOT_STICKY
+        return START_STICKY
+    }
+
+    private fun recoverFromPrefs() {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (!running) start(engine.lat, engine.lon)
+        paused = prefs.getBoolean(KEY_PAUSED, false)
+        engine.heading = prefs.getFloat(KEY_HEADING, 0f)
+        val routeJson = prefs.getString(KEY_ACTIVE_ROUTE, null) ?: return
+        try {
+            val arr = org.json.JSONArray(routeJson)
+            val points = ArrayList<AutoPilot.Waypoint>(arr.length())
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                points.add(AutoPilot.Waypoint(o.getDouble("lat"), o.getDouble("lon")))
+            }
+            if (points.isNotEmpty()) autopilot.start(points)
+            refreshNotification()
+        } catch (ignored: Exception) {}
     }
 
     private fun start(lat: Double, lon: Double) {
@@ -157,6 +183,11 @@ class StepTrackerService : Service() {
         // Flush final: injeta o que tiver acumulado
         flushSteps(force = true)
         persistPosition()
+        // Stop explícito do user: limpa rota pra NÃO auto-recuperar no próximo start
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .remove(KEY_ACTIVE_ROUTE)
+            .putBoolean(KEY_PAUSED, false)
+            .apply()
         teardownMockProvider()
         releaseWakeLock()
         if (Build.VERSION.SDK_INT >= 33) {
@@ -184,6 +215,11 @@ class StepTrackerService : Service() {
             }
             if (autopilot.start(points)) {
                 paused = false
+                // Persiste pra sobreviver a restart do service
+                getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+                    .putString(KEY_ACTIVE_ROUTE, json)
+                    .putBoolean(KEY_PAUSED, false)
+                    .apply()
                 refreshNotification()
             }
         } catch (ignored: Exception) {}
@@ -199,6 +235,10 @@ class StepTrackerService : Service() {
         flushSteps(force = true)
         engine.teleport(lat, lon)
         accumulatedMeters = 0.0  // zera, não ganha passos pelo pulo
+        // Limpa rota persistida (teleport cancela autopilot)
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .remove(KEY_ACTIVE_ROUTE)
+            .apply()
         persistPosition()
         refreshNotification()
     }
@@ -206,12 +246,18 @@ class StepTrackerService : Service() {
     private fun handlePause() {
         if (!running) return
         paused = true
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_PAUSED, true)
+            .apply()
         refreshNotification()
     }
 
     private fun handleResume() {
         if (!running) return
         paused = false
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_PAUSED, false)
+            .apply()
         refreshNotification()
     }
 
@@ -404,10 +450,15 @@ class StepTrackerService : Service() {
     // --- Persistência ---
 
     private fun persistPosition() {
-        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+        val editor = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
             .putLong(KEY_LAT, java.lang.Double.doubleToRawLongBits(engine.lat))
             .putLong(KEY_LON, java.lang.Double.doubleToRawLongBits(engine.lon))
-            .apply()
+            .putFloat(KEY_HEADING, engine.heading)
+        // Se autopilot terminou (acabou a rota), limpa a rota persistida pra não re-executar após restart
+        if (!autopilot.isActive()) {
+            editor.remove(KEY_ACTIVE_ROUTE)
+        }
+        editor.apply()
     }
 
     private fun incrementTodayCounter(steps: Long) {
